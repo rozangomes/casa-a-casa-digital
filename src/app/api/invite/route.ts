@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     coordinator_name: coordinator_name || invited_by_name || '',
     neighborhood_zone: neighborhood_zone || null,
     team_id: team_id || uuidv4(),
-    phone: '',
+    phone: id,
     is_coordinator: role !== 'visitador',
     created_at: new Date().toISOString(),
   })
