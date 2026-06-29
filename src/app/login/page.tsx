@@ -189,6 +189,12 @@ function RealLogin() {
       <div className="pt-2">
         <BigButton type="submit" label="Entrar" loading={loading} variant="primary" />
       </div>
+
+      <div className="text-center">
+        <a href="/forgot-password" className="text-brand-muted text-sm hover:text-brand-primary transition-colors cursor-pointer">
+          Esqueci minha senha
+        </a>
+      </div>
     </form>
   )
 }

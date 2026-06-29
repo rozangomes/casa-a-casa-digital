@@ -24,6 +24,8 @@ create table if not exists public.users (
   email             text unique,
   password_hash     text,
   invite_token      text unique,
+  reset_token       text unique,
+  reset_token_expires_at timestamptz,
   status            text not null default 'active'
                       check (status in ('pending','active')),
   role              text not null default 'visitador'
