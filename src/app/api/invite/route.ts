@@ -20,6 +20,18 @@ export async function POST(req: NextRequest) {
   const invite_token = uuidv4()
   const id = uuidv4()
 
+  // Garante que o team_id existe na tabela teams antes de inserir o usuário
+  let resolvedTeamId = team_id
+  if (!resolvedTeamId) {
+    resolvedTeamId = uuidv4()
+    await supabase.from('teams').insert({
+      id: resolvedTeamId,
+      name: `Equipe ${name}`,
+      coordinator_name: name,
+      city: 'São Paulo',
+    })
+  }
+
   const { error } = await supabase.from('users').insert({
     id,
     name,
@@ -30,7 +42,7 @@ export async function POST(req: NextRequest) {
     invited_by,
     coordinator_name: coordinator_name || invited_by_name || '',
     neighborhood_zone: neighborhood_zone || null,
-    team_id: team_id || uuidv4(),
+    team_id: resolvedTeamId,
     phone: id,
     is_coordinator: role !== 'visitador',
     created_at: new Date().toISOString(),
