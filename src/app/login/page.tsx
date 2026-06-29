@@ -159,6 +159,7 @@ function RealLogin() {
     await saveSession(data.user)
     setUser(data.user)
     if (data.user.role === 'estrategista') router.push('/management')
+    else if (data.user.role === 'coordenador_regiao') router.push('/region')
     else if (data.user.role === 'coordenador_bairro') router.push('/coordinator')
     else router.push('/dashboard')
   }
