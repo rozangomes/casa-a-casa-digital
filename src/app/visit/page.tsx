@@ -4,10 +4,12 @@ export const dynamic = 'force-dynamic'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { v4 as uuidv4 } from 'uuid'
-import { ArrowLeft, MapPin, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { ArrowLeft, MapPin, CheckCircle, ChevronDown, ChevronUp, Search } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 import { saveVisit } from '@/lib/db'
+import { syncPendingVisits } from '@/lib/sync'
 import { getCurrentPosition } from '@/lib/geo'
+import { fetchCep, formatCep } from '@/lib/cep'
 import { BigButton } from '@/components/ui/BigButton'
 import type { Visit, PoliticalPerception, DemandCategory } from '@/types'
 import { clsx } from 'clsx'
@@ -38,14 +40,15 @@ export default function VisitPage() {
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
   const [showExtra, setShowExtra] = useState(false)
+  const [cepLoading, setCepLoading] = useState(false)
 
   const geoRef = useRef<{ lat?: number; lng?: number; acc?: number }>({})
 
   const [form, setForm] = useState({
+    cep: '',
     neighborhood: '',
     street_number: '',
     city: 'Magé',
-    cep: '',
     political_perception: '' as PoliticalPerception | '',
     main_demands: [] as DemandCategory[],
     demand_description: '',
@@ -70,6 +73,21 @@ export default function VisitPage() {
     }
     init()
   }, [user, router])
+
+  async function handleCepBlur() {
+    const digits = form.cep.replace(/\D/g, '')
+    if (digits.length !== 8) return
+    setCepLoading(true)
+    try {
+      const data = await fetchCep(digits)
+      setForm((f) => ({
+        ...f,
+        neighborhood: data.bairro || f.neighborhood,
+        city: data.localidade || f.city,
+      }))
+    } catch { /* CEP não encontrado */ }
+    finally { setCepLoading(false) }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -114,6 +132,8 @@ export default function VisitPage() {
 
     await saveVisit(visit)
     addVisit(visit)
+    // Envia imediatamente ao Supabase se online
+    syncPendingVisits().catch(() => {})
     setLoading(false)
     setSaved(true)
     const dest = user.role === 'coordenador_regiao' ? '/region'
@@ -161,6 +181,20 @@ export default function VisitPage() {
         {/* ── LOCALIZAÇÃO ───────────────────────────────────────── */}
         <div className="bg-brand-card border border-brand-border rounded-2xl p-4 space-y-3">
           <p className="text-brand-text font-semibold text-sm">Onde foi a visita?</p>
+          <div className="relative">
+            <input
+              value={form.cep}
+              onChange={(e) => setForm((f) => ({ ...f, cep: formatCep(e.target.value) }))}
+              onBlur={handleCepBlur}
+              placeholder="CEP (preenche bairro automaticamente)"
+              inputMode="numeric"
+              maxLength={9}
+              className={inputClass}
+            />
+            {cepLoading && (
+              <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-primary animate-spin" />
+            )}
+          </div>
           <input
             value={form.neighborhood}
             onChange={(e) => setForm((f) => ({ ...f, neighborhood: e.target.value }))}
