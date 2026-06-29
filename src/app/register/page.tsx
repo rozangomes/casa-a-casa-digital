@@ -1,8 +1,8 @@
 'use client'
 export const dynamic = 'force-dynamic'
 
-import { Suspense, useEffect, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { CheckCircle, Lock, Eye, EyeOff } from 'lucide-react'
 import { saveSession } from '@/lib/db'
 import { useAppStore } from '@/store/useAppStore'
@@ -26,8 +26,7 @@ const ROLE_LABEL: Record<string, string> = {
 
 function RegisterContent() {
   const router = useRouter()
-  const params = useSearchParams()
-  const token = params.get('token')
+  const [token, setToken] = useState<string | null>(null)
 
   const [pendingUser, setPendingUser] = useState<PendingUser | null>(null)
   const [tokenError, setTokenError] = useState('')
@@ -39,9 +38,11 @@ function RegisterContent() {
   const [done, setDone] = useState(false)
 
   useEffect(() => {
-    if (!token) { setTokenError('Link inválido. Peça um novo convite.'); return }
+    const t = new URLSearchParams(window.location.search).get('token')
+    setToken(t)
+    if (!t) { setTokenError('Link inválido. Peça um novo convite.'); return }
 
-    fetch(`/api/register?token=${token}`)
+    fetch(`/api/register?token=${t}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.error) setTokenError(data.error)
@@ -195,16 +196,5 @@ function RegisterContent() {
 }
 
 export default function RegisterPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-brand-bg flex items-center justify-center">
-        <svg className="w-6 h-6 animate-spin text-brand-primary" viewBox="0 0 24 24" fill="none">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-        </svg>
-      </div>
-    }>
-      <RegisterContent />
-    </Suspense>
-  )
+  return <RegisterContent />
 }
