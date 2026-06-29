@@ -4,125 +4,84 @@ export const dynamic = 'force-dynamic'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { v4 as uuidv4 } from 'uuid'
-import { ArrowLeft, MapPin, CheckCircle, Search } from 'lucide-react'
+import { ArrowLeft, MapPin, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 import { saveVisit } from '@/lib/db'
 import { getCurrentPosition } from '@/lib/geo'
-import { fetchCep, formatCep } from '@/lib/cep'
 import { BigButton } from '@/components/ui/BigButton'
 import type { Visit, PoliticalPerception, DemandCategory } from '@/types'
-import { DEMAND_LABELS } from '@/types'
 import { clsx } from 'clsx'
 
-// ── Componente Toggle Sim/Não ─────────────────────────────────────────────────
-function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div className="flex items-center justify-between bg-brand-card border border-brand-border rounded-2xl px-4 py-4">
-      <span className="text-brand-text font-medium text-base">{label}</span>
-      <div className="flex gap-2">
-        {(['Sim', 'Não'] as const).map((opt) => {
-          const active = opt === 'Sim' ? value : !value
-          return (
-            <button key={opt} type="button" onClick={() => onChange(opt === 'Sim')}
-              className={clsx('px-5 py-2 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer',
-                active ? 'bg-brand-primary text-brand-bg shadow-green-glow' : 'bg-brand-border/50 text-brand-muted hover:bg-brand-border'
-              )}>
-              {opt}
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-const perceptions: { value: PoliticalPerception; label: string; color: string }[] = [
-  { value: 'muito_favoravel', label: 'Muito favorável', color: 'border-emerald-500 bg-emerald-500/20 text-emerald-400' },
-  { value: 'favoravel',      label: 'Favorável',       color: 'border-green-500 bg-green-500/20 text-green-400' },
-  { value: 'indiferente',    label: 'Indiferente',     color: 'border-yellow-500 bg-yellow-500/20 text-yellow-400' },
-  { value: 'contrario',      label: 'Contrário',       color: 'border-red-500 bg-red-500/20 text-red-400' },
+// ── Percepção ─────────────────────────────────────────────────────────────────
+const perceptions: { value: PoliticalPerception; emoji: string; label: string; color: string; active: string }[] = [
+  { value: 'muito_favoravel', emoji: '🤩', label: 'Muito favorável', color: 'border-emerald-500/40 bg-emerald-500/10', active: 'border-emerald-500 bg-emerald-500/25 shadow-[0_0_12px_#10b98140]' },
+  { value: 'favoravel',       emoji: '😊', label: 'Favorável',       color: 'border-green-500/40 bg-green-500/10',   active: 'border-green-500 bg-green-500/25 shadow-[0_0_12px_#22c55e40]' },
+  { value: 'indiferente',     emoji: '😐', label: 'Indiferente',     color: 'border-yellow-500/40 bg-yellow-500/10', active: 'border-yellow-500 bg-yellow-500/25 shadow-[0_0_12px_#eab30840]' },
+  { value: 'contrario',       emoji: '😠', label: 'Contrário',       color: 'border-red-500/40 bg-red-500/10',       active: 'border-red-500 bg-red-500/25 shadow-[0_0_12px_#ef444440]' },
 ]
 
-const demandOptions = Object.entries(DEMAND_LABELS) as [DemandCategory, string][]
+// ── Demandas ──────────────────────────────────────────────────────────────────
+const demands: { value: DemandCategory; emoji: string; label: string }[] = [
+  { value: 'saude',             emoji: '🏥', label: 'Saúde' },
+  { value: 'educacao',          emoji: '📚', label: 'Educação' },
+  { value: 'transporte',        emoji: '🚌', label: 'Transporte' },
+  { value: 'seguranca',         emoji: '🛡️', label: 'Segurança' },
+  { value: 'emprego_renda',     emoji: '💼', label: 'Emprego' },
+  { value: 'infraestrutura',    emoji: '🏗️', label: 'Infraestrutura' },
+  { value: 'assistencia_social',emoji: '🤝', label: 'Assistência' },
+  { value: 'outro',             emoji: '💬', label: 'Outro' },
+]
 
 export default function VisitPage() {
   const router = useRouter()
   const { user, addVisit, syncStatus } = useAppStore()
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [geoError, setGeoError] = useState('')
-  const [cepLoading, setCepLoading] = useState(false)
-  const [cepError, setCepError] = useState('')
+  const [showExtra, setShowExtra] = useState(false)
 
   const geoRef = useRef<{ lat?: number; lng?: number; acc?: number }>({})
 
   const [form, setForm] = useState({
-    cep: '',
-    street: '',
-    street_number: '',
     neighborhood: '',
+    street_number: '',
     city: 'Magé',
-    state: '',
+    cep: '',
+    political_perception: '' as PoliticalPerception | '',
+    main_demands: [] as DemandCategory[],
+    demand_description: '',
+    received_material: false,
     resident_name: '',
     residents_over_16: '' as string | number,
     phone_collected: '',
-    resident_home: true,
-    received_material: false,
-    political_perception: 'favoravel' as PoliticalPerception,
-    main_demands: [] as DemandCategory[],
-    demand_description: '',
     notes: '',
   })
 
   useEffect(() => {
     async function init() {
       if (!user) {
-        // Restaura sessão do IndexedDB antes de redirecionar (suporte a reload direto)
         const { getSession } = await import('@/lib/db')
         const session = await getSession()
         if (!session) { router.replace('/login'); return }
         useAppStore.getState().setUser(session)
       }
-      // GPS em background — inicia assim que a tela abre
       getCurrentPosition()
         .then((pos) => { geoRef.current = { lat: pos.latitude, lng: pos.longitude } })
-        .catch(() => setGeoError('GPS não obtido — o endereço via CEP será usado'))
+        .catch(() => {})
     }
     init()
   }, [user, router])
 
-  async function handleCepBlur() {
-    const digits = form.cep.replace(/\D/g, '')
-    if (digits.length !== 8) return
-    setCepLoading(true)
-    setCepError('')
-    try {
-      const data = await fetchCep(digits)
-      setForm((f) => ({
-        ...f,
-        street: data.logradouro || f.street,
-        neighborhood: data.bairro || f.neighborhood,
-        city: data.localidade || f.city,
-        state: data.uf || f.state,
-      }))
-    } catch {
-      setCepError('CEP não encontrado. Preencha o endereço manualmente.')
-    } finally {
-      setCepLoading(false)
-    }
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!form.neighborhood || !form.political_perception) return
     if (!user) return
     setLoading(true)
 
-    // Tenta um último GPS se ainda não travou
     if (!geoRef.current.lat) {
       try {
         const pos = await getCurrentPosition(5000)
         geoRef.current = { lat: pos.latitude, lng: pos.longitude }
-      } catch { /* usa só o CEP */ }
+      } catch { /* sem GPS */ }
     }
 
     const visit: Visit = {
@@ -131,21 +90,19 @@ export default function VisitPage() {
       team_id: user.team_id,
       coordinator_name: user.coordinator_name,
       cep: form.cep.replace(/\D/g, '') || undefined,
-      city: form.city || 'Não informada',
-      neighborhood: form.neighborhood || 'Não informado',
-      street: form.street || undefined,
+      city: form.city || 'Magé',
+      neighborhood: form.neighborhood,
       street_number: form.street_number || undefined,
-      state: form.state || undefined,
-      resident_name: form.resident_name || undefined,
-      residents_over_16: form.residents_over_16 !== '' ? Number(form.residents_over_16) : undefined,
-      phone_collected: form.phone_collected || undefined,
-      resident_home: form.resident_home,
+      resident_home: true,
       received_material: form.received_material,
-      political_perception: form.political_perception,
+      political_perception: form.political_perception as PoliticalPerception,
       main_demand: form.main_demands[0] || undefined,
       main_demand_2: form.main_demands[1] || undefined,
       main_demand_3: form.main_demands[2] || undefined,
       demand_description: form.demand_description || undefined,
+      resident_name: form.resident_name || undefined,
+      residents_over_16: form.residents_over_16 !== '' ? Number(form.residents_over_16) : undefined,
+      phone_collected: form.phone_collected || undefined,
       notes: form.notes || undefined,
       latitude: geoRef.current.lat,
       longitude: geoRef.current.lng,
@@ -165,7 +122,7 @@ export default function VisitPage() {
     setTimeout(() => router.push(dest), 1200)
   }
 
-  const inputClass = 'bg-brand-card border border-brand-border rounded-2xl px-4 py-4 text-brand-text text-base placeholder-brand-muted w-full'
+  const inputClass = 'bg-brand-card border border-brand-border rounded-2xl px-4 py-4 text-brand-text text-base placeholder-brand-muted w-full focus:border-brand-primary transition-colors'
 
   if (saved) {
     return (
@@ -179,12 +136,14 @@ export default function VisitPage() {
     )
   }
 
+  const canSave = !!form.neighborhood && !!form.political_perception
+
   return (
     <div className="min-h-screen bg-brand-bg flex flex-col safe-top">
       {/* Header */}
       <div className="flex items-center gap-3 px-5 pt-5 pb-4">
         <button onClick={() => router.back()}
-          className="p-2 rounded-xl bg-brand-card border border-brand-border text-brand-muted hover:text-brand-text transition-colors cursor-pointer"
+          className="p-2 rounded-xl bg-brand-card border border-brand-border text-brand-muted cursor-pointer"
           aria-label="Voltar">
           <ArrowLeft className="w-5 h-5" />
         </button>
@@ -192,112 +151,64 @@ export default function VisitPage() {
           <h1 className="text-xl font-bold text-brand-text">Registrar visita</h1>
           <div className="flex items-center gap-1 text-brand-muted text-xs mt-0.5">
             <MapPin className="w-3 h-3 text-brand-primary" />
-            <span>{geoRef.current.lat ? 'GPS ativo' : geoError || 'Aguardando GPS…'}</span>
+            <span>{geoRef.current.lat ? 'GPS ativo' : 'Aguardando GPS…'}</span>
           </div>
         </div>
       </div>
 
-      {geoError && (
-        <div className="mx-5 mb-3 px-4 py-2.5 bg-brand-warning/10 border border-brand-warning/30 rounded-xl text-brand-warning text-xs">
-          {geoError}
-        </div>
-      )}
-
       <form onSubmit={handleSubmit} className="flex-1 flex flex-col px-5 gap-4 pb-8 safe-bottom overflow-y-auto">
 
-        {/* ── ENDEREÇO VIA CEP ──────────────────────────────────── */}
+        {/* ── LOCALIZAÇÃO ───────────────────────────────────────── */}
         <div className="bg-brand-card border border-brand-border rounded-2xl p-4 space-y-3">
-          <p className="text-brand-text font-semibold text-sm">Endereço</p>
-
-          <div className="relative">
-            <input value={form.cep}
-              onChange={(e) => setForm((f) => ({ ...f, cep: formatCep(e.target.value) }))}
-              onBlur={handleCepBlur}
-              placeholder="CEP (preenchimento automático)"
+          <p className="text-brand-text font-semibold text-sm">Onde foi a visita?</p>
+          <input
+            value={form.neighborhood}
+            onChange={(e) => setForm((f) => ({ ...f, neighborhood: e.target.value }))}
+            placeholder="Bairro *"
+            required
+            className={inputClass}
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              value={form.street_number}
+              onChange={(e) => setForm((f) => ({ ...f, street_number: e.target.value }))}
+              placeholder="Número da casa"
               inputMode="numeric"
-              maxLength={9}
               className={inputClass}
             />
-            {cepLoading && (
-              <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-primary animate-spin" />
-            )}
-          </div>
-          {cepError && <p className="text-brand-warning text-xs">{cepError}</p>}
-
-          <div className="grid grid-cols-3 gap-2">
-            <input value={form.street} onChange={(e) => setForm((f) => ({ ...f, street: e.target.value }))}
-              placeholder="Rua" className={clsx(inputClass, 'col-span-2')} />
-            <input value={form.street_number} onChange={(e) => setForm((f) => ({ ...f, street_number: e.target.value }))}
-              placeholder="Nº" className={inputClass} inputMode="numeric" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <input value={form.neighborhood} onChange={(e) => setForm((f) => ({ ...f, neighborhood: e.target.value }))}
-              placeholder="Bairro" className={inputClass} />
-            <input value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
-              placeholder="Cidade" className={inputClass} />
+            <input
+              value={form.city}
+              onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+              placeholder="Cidade"
+              className={inputClass}
+            />
           </div>
         </div>
 
-        {/* ── DADOS DO MORADOR ─────────────────────────────────── */}
-        <div className="bg-brand-card border border-brand-border rounded-2xl p-4 space-y-3">
-          <p className="text-brand-text font-semibold text-sm">Morador</p>
-          <input
-            value={form.resident_name}
-            onChange={(e) => setForm((f) => ({ ...f, resident_name: e.target.value }))}
-            placeholder="Nome do morador (opcional)"
-            className={inputClass}
-          />
-          <input
-            value={form.residents_over_16}
-            onChange={(e) => setForm((f) => ({ ...f, residents_over_16: e.target.value }))}
-            placeholder="Moradores com 16+ anos"
-            type="number"
-            min="0"
-            inputMode="numeric"
-            className={inputClass}
-          />
-          <input
-            value={form.phone_collected}
-            onChange={(e) => setForm((f) => ({ ...f, phone_collected: e.target.value }))}
-            placeholder="Telefone do morador (opcional)"
-            type="tel"
-            inputMode="tel"
-            className={inputClass}
-          />
-        </div>
-
-        {/* ── DADOS DA VISITA ───────────────────────────────────── */}
-        <Toggle label="Morador estava em casa?" value={form.resident_home}
-          onChange={(v) => setForm((f) => ({ ...f, resident_home: v }))} />
-
-        <Toggle label="Recebeu material?" value={form.received_material}
-          onChange={(v) => setForm((f) => ({ ...f, received_material: v }))} />
-
-        {/* Percepção política */}
+        {/* ── PERCEPÇÃO POLÍTICA ────────────────────────────────── */}
         <div className="bg-brand-card border border-brand-border rounded-2xl p-4">
-          <p className="text-brand-text font-medium mb-3">Percepção política</p>
-          <div className="grid grid-cols-2 gap-2">
-            {perceptions.map(({ value, label, color }) => (
+          <p className="text-brand-text font-semibold text-sm mb-3">Como foi a recepção? *</p>
+          <div className="grid grid-cols-2 gap-3">
+            {perceptions.map(({ value, emoji, label, color, active }) => (
               <button key={value} type="button"
                 onClick={() => setForm((f) => ({ ...f, political_perception: value }))}
-                className={clsx('py-3 px-2 rounded-xl border text-sm font-semibold transition-all duration-200 cursor-pointer text-center',
-                  form.political_perception === value ? color : 'border-brand-border bg-brand-border/20 text-brand-muted hover:border-brand-primary/30'
+                className={clsx(
+                  'flex flex-col items-center gap-2 py-4 rounded-2xl border-2 transition-all duration-200 cursor-pointer',
+                  form.political_perception === value ? active : color
                 )}>
-                {label}
+                <span className="text-3xl">{emoji}</span>
+                <span className="text-xs font-semibold text-brand-text">{label}</span>
               </button>
             ))}
           </div>
         </div>
 
-        {/* ── INTELIGÊNCIA TERRITORIAL ──────────────────────────── */}
+        {/* ── DEMANDAS ──────────────────────────────────────────── */}
         <div className="bg-brand-card border border-brand-border rounded-2xl p-4">
-          <p className="text-brand-text font-medium mb-1">Demandas do morador</p>
-          <p className="text-brand-muted text-xs mb-3">
-            Selecione até 3 áreas · {form.main_demands.length}/3 selecionadas
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            {demandOptions.map(([value, label]) => {
+          <p className="text-brand-text font-semibold text-sm mb-1">Principais demandas</p>
+          <p className="text-brand-muted text-xs mb-3">Até 3 · {form.main_demands.length}/3</p>
+          <div className="grid grid-cols-4 gap-2">
+            {demands.map(({ value, emoji, label }) => {
               const selected = form.main_demands.includes(value)
               const disabled = !selected && form.main_demands.length >= 3
               return (
@@ -308,20 +219,23 @@ export default function VisitPage() {
                       ? f.main_demands.filter((d) => d !== value)
                       : [...f.main_demands, value],
                   }))}
-                  className={clsx('py-3 px-2 rounded-xl border text-sm font-medium transition-all duration-200 cursor-pointer text-center',
+                  className={clsx(
+                    'flex flex-col items-center gap-1.5 py-3 rounded-xl border transition-all duration-200 cursor-pointer',
                     selected
-                      ? 'border-brand-info bg-brand-info/15 text-brand-info'
+                      ? 'border-brand-info bg-brand-info/15'
                       : disabled
-                        ? 'border-brand-border bg-brand-border/10 text-brand-muted/40 cursor-not-allowed'
-                        : 'border-brand-border bg-brand-border/20 text-brand-muted hover:border-brand-info/30'
+                        ? 'border-brand-border/30 opacity-30 cursor-not-allowed'
+                        : 'border-brand-border bg-brand-border/20 hover:border-brand-info/40'
                   )}>
-                  {label}
+                  <span className="text-2xl">{emoji}</span>
+                  <span className="text-[10px] font-medium text-brand-muted leading-tight text-center">{label}</span>
                 </button>
               )
             })}
           </div>
           {form.main_demands.includes('outro') && (
-            <textarea value={form.demand_description}
+            <textarea
+              value={form.demand_description}
               onChange={(e) => setForm((f) => ({ ...f, demand_description: e.target.value }))}
               placeholder="Descreva a demanda…"
               rows={2}
@@ -330,14 +244,81 @@ export default function VisitPage() {
           )}
         </div>
 
-        <textarea value={form.notes}
-          onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-          placeholder="Observação curta (opcional)"
-          rows={2}
-          className="bg-brand-card border border-brand-border rounded-2xl px-4 py-4 text-brand-text text-base placeholder-brand-muted resize-none w-full"
+        {/* ── RECEBEU MATERIAL ──────────────────────────────────── */}
+        <div className="flex items-center justify-between bg-brand-card border border-brand-border rounded-2xl px-4 py-4">
+          <span className="text-brand-text font-medium">Recebeu material?</span>
+          <div className="flex gap-2">
+            {(['Sim', 'Não'] as const).map((opt) => {
+              const active = opt === 'Sim' ? form.received_material : !form.received_material
+              return (
+                <button key={opt} type="button"
+                  onClick={() => setForm((f) => ({ ...f, received_material: opt === 'Sim' }))}
+                  className={clsx('px-5 py-2 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer',
+                    active ? 'bg-brand-primary text-brand-bg' : 'bg-brand-border/50 text-brand-muted'
+                  )}>
+                  {opt}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* ── DETALHES EXTRAS (recolhido) ───────────────────────── */}
+        <button type="button"
+          onClick={() => setShowExtra((v) => !v)}
+          className="flex items-center justify-between px-4 py-3 bg-brand-card border border-brand-border rounded-2xl text-brand-muted text-sm cursor-pointer hover:border-brand-primary/40 transition-colors">
+          <span>+ Detalhes do morador (opcional)</span>
+          {showExtra ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+
+        {showExtra && (
+          <div className="bg-brand-card border border-brand-border rounded-2xl p-4 space-y-3 animate-fade-in">
+            <input
+              value={form.resident_name}
+              onChange={(e) => setForm((f) => ({ ...f, resident_name: e.target.value }))}
+              placeholder="Nome do morador"
+              className={inputClass}
+            />
+            <input
+              value={form.residents_over_16}
+              onChange={(e) => setForm((f) => ({ ...f, residents_over_16: e.target.value }))}
+              placeholder="Moradores com 16+ anos"
+              type="number"
+              min="0"
+              inputMode="numeric"
+              className={inputClass}
+            />
+            <input
+              value={form.phone_collected}
+              onChange={(e) => setForm((f) => ({ ...f, phone_collected: e.target.value }))}
+              placeholder="Telefone do morador"
+              type="tel"
+              inputMode="tel"
+              className={inputClass}
+            />
+            <textarea
+              value={form.notes}
+              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+              placeholder="Observação"
+              rows={2}
+              className="w-full bg-brand-surface border border-brand-border rounded-xl px-4 py-3 text-brand-text text-sm placeholder-brand-muted resize-none"
+            />
+          </div>
+        )}
+
+        <BigButton
+          type="submit"
+          label="Salvar visita"
+          loading={loading}
+          variant="primary"
+          disabled={!canSave}
         />
 
-        <BigButton type="submit" label="Salvar visita" loading={loading} variant="primary" />
+        {!canSave && (
+          <p className="text-brand-muted text-xs text-center -mt-2">
+            Preencha o bairro e a recepção para salvar
+          </p>
+        )}
       </form>
     </div>
   )
