@@ -22,6 +22,7 @@ import { ptBR } from 'date-fns/locale'
 import { clsx } from 'clsx'
 
 const VisitsMap = dynamicImport(() => import('@/components/VisitsMap'), { ssr: false })
+const DemandsByNeighborhoodChart = dynamicImport(() => import('@/components/DemandsByNeighborhoodChart'), { ssr: false })
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 function buildStats(visits: Visit[], userNames: Record<string, string> = {}): DashboardStats {
@@ -103,6 +104,30 @@ function buildTerritorial(visits: Visit[]): TerritorialIntelligence[] {
         .map((v) => ({ lat: v.latitude!, lng: v.longitude!, demand: v.main_demand || 'outro' })),
     }
   }).sort((a, b) => b.total_visits - a.total_visits)
+}
+
+function buildNeighborhoodDemands(visits: Visit[]) {
+  const map: Record<string, Record<DemandCategory, number>> = {}
+  const demands = new Set<DemandCategory>()
+
+  visits.forEach((v) => {
+    const nb = v.neighborhood || 'Não informado';
+    if (!map[nb]) map[nb] = {} as Record<DemandCategory, number>
+    ;([v.main_demand, v.main_demand_2, v.main_demand_3] as (DemandCategory | undefined)[])
+      .forEach((d) => {
+        if (d) {
+          map[nb][d] = (map[nb][d] || 0) + 1
+          demands.add(d)
+        }
+      })
+  })
+
+  const data = Object.entries(map)
+    .map(([neighborhood, counts]) => ({ neighborhood, ...counts, total: Object.values(counts).reduce((s, n) => s + n, 0) }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 12)
+
+  return { data, activeDemands: Array.from(demands) as DemandCategory[] }
 }
 
 type Tab = 'overview' | 'territory' | 'militants' | 'map' | 'team'
@@ -202,6 +227,7 @@ export default function ManagementPage() {
 
   const stats = useMemo(() => buildStats(visits, userNames), [visits, userNames])
   const territorial = useMemo(() => buildTerritorial(visits), [visits])
+  const neighborhoodDemands = useMemo(() => buildNeighborhoodDemands(visits), [visits])
   const total = stats.total_visits || 1
   const favorable = stats.by_perception.muito_favoravel + stats.by_perception.favoravel
   const maxBar = Math.max(...stats.daily_series.map((d) => d.count), 1)
@@ -431,6 +457,20 @@ export default function ManagementPage() {
         {/* ── INTELIGÊNCIA TERRITORIAL ──────────────────────────── */}
         {!loading && tab === 'territory' && (
           <div className="space-y-4 animate-fade-in">
+
+            {/* Gráfico cruzado bairro × demanda */}
+            <div className="bg-brand-card border border-brand-border rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Zap className="w-4 h-4 text-brand-primary" />
+                <p className="text-brand-text font-semibold text-sm">Demandas por Bairro</p>
+              </div>
+              <p className="text-brand-muted text-xs mb-4">Cruzamento das principais dores com os bairros visitados</p>
+              <DemandsByNeighborhoodChart
+                data={neighborhoodDemands.data}
+                activeDemands={neighborhoodDemands.activeDemands}
+              />
+            </div>
+
             <div className="flex items-center gap-2 text-brand-muted text-xs pt-1">
               <AlertCircle className="w-3.5 h-3.5" />
               Toque num bairro para ver as demandas detalhadas
