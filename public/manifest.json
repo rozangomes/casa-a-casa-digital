@@ -1,7 +1,7 @@
 {
-  "name": "IMPULSO Território",
-  "short_name": "IMPULSO",
-  "description": "App de campanha eleitoral - registro de visitas porta a porta",
+  "name": "Casa a Casa Digital",
+  "short_name": "Casa a Casa",
+  "description": "Gestão de visitas domiciliares de campanha - Impulso Político",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#020617",
