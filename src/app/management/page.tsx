@@ -6,8 +6,8 @@ import { useRouter } from 'next/navigation'
 import dynamicImport from 'next/dynamic'
 import {
   Home, Users, MapPin, TrendingUp, LogOut,
-  Trophy, Clock, BarChart2, Download, Filter,
-  AlertCircle, Zap,
+  Trophy, Clock, BarChart2, AlertCircle, Zap,
+  UserPlus, Mail, CheckCircle, XCircle,
 } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
@@ -105,7 +105,16 @@ function buildTerritorial(visits: Visit[]): TerritorialIntelligence[] {
   }).sort((a, b) => b.total_visits - a.total_visits)
 }
 
-type Tab = 'overview' | 'territory' | 'militants' | 'map'
+type Tab = 'overview' | 'territory' | 'militants' | 'map' | 'team'
+
+type TeamMember = {
+  id: string
+  name: string
+  email: string
+  role: string
+  status: 'pending' | 'active'
+  neighborhood_zone?: string
+}
 
 const DEMAND_COLORS: Record<DemandCategory, string> = {
   saude: 'bg-red-500',
@@ -128,6 +137,14 @@ export default function ManagementPage() {
   const [tab, setTab] = useState<Tab>('overview')
   const [selectedNeighborhood, setSelectedNeighborhood] = useState<string | null>(null)
 
+  // Equipe
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const [teamLoading, setTeamLoading] = useState(false)
+  const [showInviteModal, setShowInviteModal] = useState(false)
+  const [inviteForm, setInviteForm] = useState({ name: '', email: '', neighborhood_zone: '' })
+  const [inviteLoading, setInviteLoading] = useState(false)
+  const [inviteResult, setInviteResult] = useState<{ ok: boolean; msg: string } | null>(null)
+
   useEffect(() => {
     async function init() {
       let activeUser = user
@@ -140,6 +157,7 @@ export default function ManagementPage() {
       }
       if (activeUser.role !== 'estrategista') { router.replace('/coordinator'); return }
       loadVisits()
+      loadTeam()
     }
     init()
   }, [user])
@@ -179,6 +197,46 @@ export default function ManagementPage() {
 
   const selectedTerr = territorial.find((t) => t.neighborhood === selectedNeighborhood)
 
+  async function loadTeam() {
+    if (!isSupabaseConfigured()) return
+    setTeamLoading(true)
+    const { data } = await supabase
+      .from('users')
+      .select('id, name, email, role, status, neighborhood_zone')
+      .eq('role', 'coordenador_bairro')
+      .order('created_at', { ascending: false })
+    setTeamMembers((data as TeamMember[]) || [])
+    setTeamLoading(false)
+  }
+
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault()
+    if (!user) return
+    setInviteLoading(true)
+    setInviteResult(null)
+    const res = await fetch('/api/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: inviteForm.name,
+        email: inviteForm.email,
+        role: 'coordenador_bairro',
+        invited_by: user.id,
+        invited_by_name: user.name,
+        neighborhood_zone: inviteForm.neighborhood_zone,
+      }),
+    })
+    const data = await res.json()
+    if (res.ok) {
+      setInviteResult({ ok: true, msg: `Convite enviado para ${inviteForm.email}` })
+      setInviteForm({ name: '', email: '', neighborhood_zone: '' })
+      loadTeam()
+    } else {
+      setInviteResult({ ok: false, msg: data.error || 'Erro ao enviar convite' })
+    }
+    setInviteLoading(false)
+  }
+
   async function handleLogout() {
     await clearSession()
     router.replace('/login')
@@ -189,6 +247,7 @@ export default function ManagementPage() {
     { id: 'territory', label: 'Território', icon: MapPin },
     { id: 'militants', label: 'Militantes', icon: Users },
     { id: 'map', label: 'Mapa', icon: MapPin },
+    { id: 'team', label: 'Equipe', icon: UserPlus },
   ]
 
   return (
@@ -452,6 +511,74 @@ export default function ManagementPage() {
           </div>
         )}
 
+        {/* ── EQUIPE ────────────────────────────────────────────── */}
+        {tab === 'team' && (
+          <div className="space-y-4 animate-fade-in pt-1">
+            <div className="flex items-center justify-between">
+              <p className="text-brand-muted text-xs uppercase tracking-wider font-medium">
+                Coordenadores de Bairro · {teamMembers.length}
+              </p>
+              <button
+                onClick={() => { setShowInviteModal(true); setInviteResult(null) }}
+                className="flex items-center gap-1.5 px-3 py-2 bg-brand-primary text-brand-bg rounded-xl text-sm font-semibold cursor-pointer hover:opacity-90 transition-opacity"
+              >
+                <UserPlus className="w-4 h-4" />
+                Convidar
+              </button>
+            </div>
+
+            {!isSupabaseConfigured() && (
+              <div className="px-4 py-3 bg-brand-info/10 border border-brand-info/30 rounded-xl text-brand-info text-sm">
+                Configure o Supabase para gerenciar a equipe.
+              </div>
+            )}
+
+            {teamLoading && (
+              <div className="flex items-center justify-center h-24 text-brand-muted gap-2">
+                <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Carregando equipe…
+              </div>
+            )}
+
+            {!teamLoading && teamMembers.map((m) => (
+              <div key={m.id} className="bg-brand-card border border-brand-border rounded-2xl px-4 py-3 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-brand-primary/20 flex items-center justify-center shrink-0">
+                  <Users className="w-4 h-4 text-brand-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-brand-text font-medium text-sm truncate">{m.name}</p>
+                  <div className="flex items-center gap-1 text-brand-muted text-xs">
+                    <Mail className="w-3 h-3" />
+                    <span className="truncate">{m.email}</span>
+                  </div>
+                  {m.neighborhood_zone && (
+                    <p className="text-brand-muted text-xs">{m.neighborhood_zone}</p>
+                  )}
+                </div>
+                <div className={clsx(
+                  'px-2 py-1 rounded-full text-xs font-medium shrink-0',
+                  m.status === 'active'
+                    ? 'bg-brand-primary/10 text-brand-primary'
+                    : 'bg-brand-warning/10 text-brand-warning'
+                )}>
+                  {m.status === 'active' ? 'Ativo' : 'Pendente'}
+                </div>
+              </div>
+            ))}
+
+            {!teamLoading && isSupabaseConfigured() && teamMembers.length === 0 && (
+              <div className="text-center py-10 text-brand-muted">
+                <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">Nenhum coordenador cadastrado ainda.</p>
+                <p className="text-xs mt-1">Convide o primeiro coordenador de bairro.</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── MAPA ──────────────────────────────────────────────── */}
         {!loading && tab === 'map' && (
           <div className="animate-fade-in pt-1">
@@ -477,6 +604,67 @@ export default function ManagementPage() {
           </div>
         )}
       </div>
+
+      {/* ── MODAL CONVIDAR COORDENADOR ────────────────────────── */}
+      {showInviteModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-4 bg-black/60 animate-fade-in"
+          onClick={(e) => e.target === e.currentTarget && setShowInviteModal(false)}>
+          <div className="w-full max-w-md bg-brand-surface border border-brand-border rounded-3xl p-6 shadow-card">
+            <h2 className="text-brand-text font-bold text-lg mb-1">Convidar Coordenador</h2>
+            <p className="text-brand-muted text-sm mb-5">
+              O convite será enviado por email com um link para criar a senha.
+            </p>
+
+            <form onSubmit={handleInvite} className="space-y-3">
+              <input
+                value={inviteForm.name}
+                onChange={(e) => setInviteForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Nome completo"
+                required
+                className="w-full bg-brand-card border border-brand-border rounded-2xl px-4 py-3.5 text-brand-text text-base placeholder-brand-muted focus:border-brand-primary transition-colors"
+              />
+              <input
+                type="email"
+                value={inviteForm.email}
+                onChange={(e) => setInviteForm((f) => ({ ...f, email: e.target.value }))}
+                placeholder="Email"
+                required
+                className="w-full bg-brand-card border border-brand-border rounded-2xl px-4 py-3.5 text-brand-text text-base placeholder-brand-muted focus:border-brand-primary transition-colors"
+              />
+              <input
+                value={inviteForm.neighborhood_zone}
+                onChange={(e) => setInviteForm((f) => ({ ...f, neighborhood_zone: e.target.value }))}
+                placeholder="Bairro / zona de atuação (opcional)"
+                className="w-full bg-brand-card border border-brand-border rounded-2xl px-4 py-3.5 text-brand-text text-base placeholder-brand-muted focus:border-brand-primary transition-colors"
+              />
+
+              {inviteResult && (
+                <div className={clsx('flex items-center gap-2 px-4 py-3 rounded-xl text-sm',
+                  inviteResult.ok
+                    ? 'bg-brand-primary/10 border border-brand-primary/30 text-brand-primary'
+                    : 'bg-brand-danger/10 border border-brand-danger/30 text-brand-danger'
+                )}>
+                  {inviteResult.ok
+                    ? <CheckCircle className="w-4 h-4 shrink-0" />
+                    : <XCircle className="w-4 h-4 shrink-0" />}
+                  {inviteResult.msg}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setShowInviteModal(false)}
+                  className="flex-1 py-3.5 rounded-2xl border border-brand-border text-brand-muted font-semibold cursor-pointer hover:border-brand-primary/40 transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={inviteLoading}
+                  className="flex-1 py-3.5 rounded-2xl bg-brand-primary text-brand-bg font-semibold cursor-pointer hover:opacity-90 transition-opacity disabled:opacity-50">
+                  {inviteLoading ? 'Enviando…' : 'Enviar convite'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

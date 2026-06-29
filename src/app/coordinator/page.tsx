@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import dynamicImport from 'next/dynamic'
 import {
   Home, Users, MapPin, TrendingUp, LogOut,
-  Trophy, Clock, CheckCircle,
+  Trophy, Clock, CheckCircle, UserPlus, Mail, XCircle,
 } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
@@ -73,6 +73,11 @@ export default function CoordinatorPage() {
   const [tab, setTab] = useState<Tab>('overview')
   const [useMock, setUseMock] = useState(false)
 
+  const [showInviteModal, setShowInviteModal] = useState(false)
+  const [inviteForm, setInviteForm] = useState({ name: '', email: '' })
+  const [inviteLoading, setInviteLoading] = useState(false)
+  const [inviteResult, setInviteResult] = useState<{ ok: boolean; msg: string } | null>(null)
+
   useEffect(() => {
     async function init() {
       if (!user) {
@@ -116,6 +121,34 @@ export default function CoordinatorPage() {
   const stats = useMemo(() => buildStats(visits), [visits])
   const favorable = stats.by_perception.muito_favoravel + stats.by_perception.favoravel
   const total = stats.total_visits || 1
+
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault()
+    if (!user) return
+    setInviteLoading(true)
+    setInviteResult(null)
+    const res = await fetch('/api/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: inviteForm.name,
+        email: inviteForm.email,
+        role: 'visitador',
+        invited_by: user.id,
+        invited_by_name: user.name,
+        coordinator_name: user.name,
+        team_id: user.team_id,
+      }),
+    })
+    const data = await res.json()
+    if (res.ok) {
+      setInviteResult({ ok: true, msg: `Convite enviado para ${inviteForm.email}` })
+      setInviteForm({ name: '', email: '' })
+    } else {
+      setInviteResult({ ok: false, msg: data.error || 'Erro ao enviar convite' })
+    }
+    setInviteLoading(false)
+  }
 
   async function handleLogout() {
     await clearSession()
@@ -221,7 +254,16 @@ export default function CoordinatorPage() {
         {/* ── MILITANTS ────────────────────────────────────────────── */}
         {tab === 'militants' && !loading && (
           <div className="space-y-3 animate-fade-in">
-            <p className="text-brand-muted text-xs uppercase tracking-wider font-medium">Ranking de militantes</p>
+            <div className="flex items-center justify-between">
+              <p className="text-brand-muted text-xs uppercase tracking-wider font-medium">Ranking de militantes</p>
+              <button
+                onClick={() => { setShowInviteModal(true); setInviteResult(null) }}
+                className="flex items-center gap-1.5 px-3 py-2 bg-brand-primary text-brand-bg rounded-xl text-sm font-semibold cursor-pointer hover:opacity-90 transition-opacity"
+              >
+                <UserPlus className="w-4 h-4" />
+                Convidar
+              </button>
+            </div>
             {stats.by_militant.map((m, i) => (
               <div key={m.phone} className="bg-brand-card border border-brand-border rounded-2xl px-4 py-3 flex items-center gap-3">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
@@ -267,6 +309,61 @@ export default function CoordinatorPage() {
           </div>
         )}
       </div>
+
+      {/* ── MODAL CONVIDAR VISITADOR ──────────────────────────── */}
+      {showInviteModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-4 bg-black/60 animate-fade-in"
+          onClick={(e) => e.target === e.currentTarget && setShowInviteModal(false)}>
+          <div className="w-full max-w-md bg-brand-surface border border-brand-border rounded-3xl p-6 shadow-card">
+            <h2 className="text-brand-text font-bold text-lg mb-1">Convidar Militante</h2>
+            <p className="text-brand-muted text-sm mb-5">
+              O convite será enviado por email com um link para criar a senha.
+            </p>
+
+            <form onSubmit={handleInvite} className="space-y-3">
+              <input
+                value={inviteForm.name}
+                onChange={(e) => setInviteForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Nome completo"
+                required
+                className="w-full bg-brand-card border border-brand-border rounded-2xl px-4 py-3.5 text-brand-text text-base placeholder-brand-muted focus:border-brand-primary transition-colors"
+              />
+              <input
+                type="email"
+                value={inviteForm.email}
+                onChange={(e) => setInviteForm((f) => ({ ...f, email: e.target.value }))}
+                placeholder="Email"
+                required
+                className="w-full bg-brand-card border border-brand-border rounded-2xl px-4 py-3.5 text-brand-text text-base placeholder-brand-muted focus:border-brand-primary transition-colors"
+              />
+
+              {inviteResult && (
+                <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm ${
+                  inviteResult.ok
+                    ? 'bg-brand-primary/10 border border-brand-primary/30 text-brand-primary'
+                    : 'bg-brand-danger/10 border border-brand-danger/30 text-brand-danger'
+                }`}>
+                  {inviteResult.ok
+                    ? <CheckCircle className="w-4 h-4 shrink-0" />
+                    : <XCircle className="w-4 h-4 shrink-0" />}
+                  {inviteResult.msg}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setShowInviteModal(false)}
+                  className="flex-1 py-3.5 rounded-2xl border border-brand-border text-brand-muted font-semibold cursor-pointer hover:border-brand-primary/40 transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={inviteLoading}
+                  className="flex-1 py-3.5 rounded-2xl bg-brand-primary text-brand-bg font-semibold cursor-pointer hover:opacity-90 transition-opacity disabled:opacity-50">
+                  {inviteLoading ? 'Enviando…' : 'Enviar convite'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

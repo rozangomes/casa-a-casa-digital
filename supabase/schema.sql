@@ -20,15 +20,26 @@ create table if not exists public.teams (
 create table if not exists public.users (
   id                uuid primary key default gen_random_uuid(),
   name              text not null,
-  phone             text not null unique,
+  phone             text not null default '' unique,
+  email             text unique,
+  password_hash     text,
+  invite_token      text unique,
+  status            text not null default 'active'
+                      check (status in ('pending','active')),
   role              text not null default 'visitador'
                       check (role in ('visitador','coordenador_bairro','estrategista')),
   team_id           uuid references public.teams(id),
   coordinator_name  text not null default '',
-  neighborhood_zone text,                    -- zona do coordenador de bairro
+  neighborhood_zone text,
   is_coordinator    boolean not null default false,
+  invited_by        uuid references public.users(id),
   created_at        timestamptz not null default now()
 );
+
+-- Índices para autenticação
+create index if not exists idx_users_email        on public.users(email);
+create index if not exists idx_users_invite_token on public.users(invite_token);
+create index if not exists idx_users_status       on public.users(status);
 
 -- ── CAMINHADAS ───────────────────────────────────────────────
 create table if not exists public.walks (

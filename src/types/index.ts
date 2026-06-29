@@ -41,11 +41,14 @@ export interface User {
   id: string
   name: string
   phone: string
+  email?: string
   role: UserRole
   team_id: string
   coordinator_name: string
-  neighborhood_zone?: string  // bairro/zona do coordenador de bairro
-  is_coordinator: boolean     // true para coordenador_bairro e estrategista
+  neighborhood_zone?: string
+  is_coordinator: boolean
+  status?: 'pending' | 'active'
+  invited_by?: string
   created_at: string
 }
 
