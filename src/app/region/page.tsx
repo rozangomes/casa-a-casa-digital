@@ -61,7 +61,7 @@ export default function RegionPage() {
   const [tab, setTab] = useState<Tab>('overview')
 
   const [userNames, setUserNames] = useState<Record<string, string>>({})
-  const [coordinators, setCoordinators] = useState<{ id: string; name: string; email: string; status: string; neighborhood_zone?: string }[]>([])
+  const [coordinators, setCoordinators] = useState<{ id: string; name: string; email: string; status: string; neighborhood_zone?: string; coordinator_name?: string }[]>([])
   const [coordLoading, setCoordLoading] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [inviteForm, setInviteForm] = useState({ name: '', phone: '', email: '', role: 'coordenador_bairro', neighborhood_zone: '' })
@@ -117,7 +117,7 @@ export default function RegionPage() {
     setCoordLoading(true)
     const { data } = await supabase
       .from('users')
-      .select('id, name, email, status, neighborhood_zone')
+      .select('id, name, email, status, neighborhood_zone, coordinator_name')
       .eq('role', 'coordenador_bairro')
       .order('created_at', { ascending: false })
     setCoordinators(data || [])
@@ -269,12 +269,20 @@ export default function RegionPage() {
               </div>
             )}
             {!coordLoading && coordinators.map((c) => (
-              <div key={c.id} className="bg-brand-card border border-brand-border rounded-2xl px-4 py-3 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-brand-primary/20 flex items-center justify-center shrink-0">
+              <div key={c.id} className="bg-brand-card border border-brand-border rounded-2xl px-4 py-3 flex items-start gap-3">
+                <div className="w-9 h-9 rounded-full bg-brand-primary/20 flex items-center justify-center shrink-0 mt-0.5">
                   <Users className="w-4 h-4 text-brand-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-brand-text font-medium text-sm truncate">{c.name}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-brand-text font-medium text-sm">{c.name}</p>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-brand-primary/15 text-brand-primary border-brand-primary/30">
+                      Coord. Bairro
+                    </span>
+                  </div>
+                  {c.coordinator_name && (
+                    <p className="text-brand-muted text-xs mt-0.5">Convidado por: {c.coordinator_name}</p>
+                  )}
                   <p className="text-brand-muted text-xs truncate">{c.email}</p>
                   {c.neighborhood_zone && <p className="text-brand-muted text-xs">{c.neighborhood_zone}</p>}
                 </div>

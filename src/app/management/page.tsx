@@ -114,6 +114,14 @@ type TeamMember = {
   role: string
   status: 'pending' | 'active'
   neighborhood_zone?: string
+  coordinator_name?: string
+}
+
+const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
+  coordenador_regiao: { label: 'Coord. Região',  cls: 'bg-blue-500/15 text-blue-400 border-blue-500/30' },
+  coordenador_bairro: { label: 'Coord. Bairro',  cls: 'bg-brand-primary/15 text-brand-primary border-brand-primary/30' },
+  visitador:          { label: 'Visitador',       cls: 'bg-slate-500/15 text-slate-400 border-slate-500/30' },
+  estrategista:       { label: 'Estrategista',    cls: 'bg-purple-500/15 text-purple-400 border-purple-500/30' },
 }
 
 const DEMAND_COLORS: Record<DemandCategory, string> = {
@@ -210,7 +218,7 @@ export default function ManagementPage() {
     setTeamLoading(true)
     const { data } = await supabase
       .from('users')
-      .select('id, name, email, role, status, neighborhood_zone')
+      .select('id, name, email, role, status, neighborhood_zone, coordinator_name')
       .in('role', ['coordenador_regiao', 'coordenador_bairro', 'visitador'])
       .order('created_at', { ascending: false })
     setTeamMembers((data as TeamMember[]) || [])
@@ -552,34 +560,44 @@ export default function ManagementPage() {
               </div>
             )}
 
-            {!teamLoading && teamMembers.map((m) => (
-              <div key={m.id} className="bg-brand-card border border-brand-border rounded-2xl px-4 py-3 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-brand-primary/20 flex items-center justify-center shrink-0">
-                  <Users className="w-4 h-4 text-brand-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-brand-text font-medium text-sm truncate">{m.name}</p>
-                  <p className="text-brand-primary text-xs font-medium">
-                    {m.role === 'coordenador_regiao' ? 'Coord. Região' : m.role === 'coordenador_bairro' ? 'Coord. Bairro' : 'Visitador'}
-                  </p>
-                  <div className="flex items-center gap-1 text-brand-muted text-xs">
-                    <Mail className="w-3 h-3" />
-                    <span className="truncate">{m.email}</span>
+            {!teamLoading && teamMembers.map((m) => {
+              const badge = ROLE_BADGE[m.role]
+              return (
+                <div key={m.id} className="bg-brand-card border border-brand-border rounded-2xl px-4 py-3 flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-full bg-brand-primary/20 flex items-center justify-center shrink-0 mt-0.5">
+                    <Users className="w-4 h-4 text-brand-primary" />
                   </div>
-                  {m.neighborhood_zone && (
-                    <p className="text-brand-muted text-xs">{m.neighborhood_zone}</p>
-                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-brand-text font-medium text-sm">{m.name}</p>
+                      {badge && (
+                        <span className={clsx('px-2 py-0.5 rounded-full text-[10px] font-semibold border', badge.cls)}>
+                          {badge.label}
+                        </span>
+                      )}
+                    </div>
+                    {m.coordinator_name && (
+                      <p className="text-brand-muted text-xs mt-0.5">Convidado por: {m.coordinator_name}</p>
+                    )}
+                    <div className="flex items-center gap-1 text-brand-muted text-xs mt-0.5">
+                      <Mail className="w-3 h-3" />
+                      <span className="truncate">{m.email}</span>
+                    </div>
+                    {m.neighborhood_zone && (
+                      <p className="text-brand-muted text-xs">{m.neighborhood_zone}</p>
+                    )}
+                  </div>
+                  <div className={clsx(
+                    'px-2 py-1 rounded-full text-xs font-medium shrink-0',
+                    m.status === 'active'
+                      ? 'bg-brand-primary/10 text-brand-primary'
+                      : 'bg-brand-warning/10 text-brand-warning'
+                  )}>
+                    {m.status === 'active' ? 'Ativo' : 'Pendente'}
+                  </div>
                 </div>
-                <div className={clsx(
-                  'px-2 py-1 rounded-full text-xs font-medium shrink-0',
-                  m.status === 'active'
-                    ? 'bg-brand-primary/10 text-brand-primary'
-                    : 'bg-brand-warning/10 text-brand-warning'
-                )}>
-                  {m.status === 'active' ? 'Ativo' : 'Pendente'}
-                </div>
-              </div>
-            ))}
+              )
+            })}
 
             {!teamLoading && isSupabaseConfigured() && teamMembers.length === 0 && (
               <div className="text-center py-10 text-brand-muted">

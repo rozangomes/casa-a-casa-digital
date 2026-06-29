@@ -79,10 +79,18 @@ create table if not exists public.visits (
     political_perception in ('muito_favoravel','favoravel','indiferente','contrario')
   ),
 
-  -- Inteligência territorial
+  -- Inteligência territorial (até 3 demandas)
   main_demand          text check (
     main_demand in ('saude','educacao','transporte','seguranca',
                     'emprego_renda','infraestrutura','assistencia_social','outro')
+  ),
+  main_demand_2        text check (
+    main_demand_2 in ('saude','educacao','transporte','seguranca',
+                      'emprego_renda','infraestrutura','assistencia_social','outro')
+  ),
+  main_demand_3        text check (
+    main_demand_3 in ('saude','educacao','transporte','seguranca',
+                      'emprego_renda','infraestrutura','assistencia_social','outro')
   ),
   demand_description   text,
 

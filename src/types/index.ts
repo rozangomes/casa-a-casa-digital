@@ -108,9 +108,11 @@ export interface Visit {
   received_material: boolean
   political_perception: PoliticalPerception
 
-  // Demanda territorial (inteligência)
+  // Demanda territorial (inteligência) — até 3 áreas
   main_demand?: DemandCategory
-  demand_description?: string         // campo aberto quando category = 'outro'
+  main_demand_2?: DemandCategory
+  main_demand_3?: DemandCategory
+  demand_description?: string
 
   // Dados do morador
   resident_name?: string

@@ -65,12 +65,12 @@ export default function VisitPage() {
     state: '',
     resident_name: '',
     residents_over_16: '' as string | number,
+    phone_collected: '',
     resident_home: true,
     received_material: false,
     political_perception: 'favoravel' as PoliticalPerception,
-    main_demand: '' as DemandCategory | '',
+    main_demands: [] as DemandCategory[],
     demand_description: '',
-    phone_collected: '',
     notes: '',
   })
 
@@ -138,12 +138,14 @@ export default function VisitPage() {
       state: form.state || undefined,
       resident_name: form.resident_name || undefined,
       residents_over_16: form.residents_over_16 !== '' ? Number(form.residents_over_16) : undefined,
+      phone_collected: form.phone_collected || undefined,
       resident_home: form.resident_home,
       received_material: form.received_material,
       political_perception: form.political_perception,
-      main_demand: (form.main_demand as DemandCategory) || undefined,
+      main_demand: form.main_demands[0] || undefined,
+      main_demand_2: form.main_demands[1] || undefined,
+      main_demand_3: form.main_demands[2] || undefined,
       demand_description: form.demand_description || undefined,
-      phone_collected: form.phone_collected || undefined,
       notes: form.notes || undefined,
       latitude: geoRef.current.lat,
       longitude: geoRef.current.lng,
@@ -243,17 +245,23 @@ export default function VisitPage() {
             placeholder="Nome do morador (opcional)"
             className={inputClass}
           />
-          <div className="flex items-center gap-3">
-            <input
-              value={form.residents_over_16}
-              onChange={(e) => setForm((f) => ({ ...f, residents_over_16: e.target.value }))}
-              placeholder="Moradores com 16+ anos"
-              type="number"
-              min="0"
-              inputMode="numeric"
-              className={inputClass}
-            />
-          </div>
+          <input
+            value={form.residents_over_16}
+            onChange={(e) => setForm((f) => ({ ...f, residents_over_16: e.target.value }))}
+            placeholder="Moradores com 16+ anos"
+            type="number"
+            min="0"
+            inputMode="numeric"
+            className={inputClass}
+          />
+          <input
+            value={form.phone_collected}
+            onChange={(e) => setForm((f) => ({ ...f, phone_collected: e.target.value }))}
+            placeholder="Telefone do morador (opcional)"
+            type="tel"
+            inputMode="tel"
+            className={inputClass}
+          />
         </div>
 
         {/* ── DADOS DA VISITA ───────────────────────────────────── */}
@@ -281,22 +289,35 @@ export default function VisitPage() {
 
         {/* ── INTELIGÊNCIA TERRITORIAL ──────────────────────────── */}
         <div className="bg-brand-card border border-brand-border rounded-2xl p-4">
-          <p className="text-brand-text font-medium mb-1">Principal demanda do morador</p>
-          <p className="text-brand-muted text-xs mb-3">Qual é a maior preocupação citada?</p>
+          <p className="text-brand-text font-medium mb-1">Demandas do morador</p>
+          <p className="text-brand-muted text-xs mb-3">
+            Selecione até 3 áreas · {form.main_demands.length}/3 selecionadas
+          </p>
           <div className="grid grid-cols-2 gap-2">
-            {demandOptions.map(([value, label]) => (
-              <button key={value} type="button"
-                onClick={() => setForm((f) => ({ ...f, main_demand: f.main_demand === value ? '' : value }))}
-                className={clsx('py-3 px-2 rounded-xl border text-sm font-medium transition-all duration-200 cursor-pointer text-center',
-                  form.main_demand === value
-                    ? 'border-brand-info bg-brand-info/15 text-brand-info'
-                    : 'border-brand-border bg-brand-border/20 text-brand-muted hover:border-brand-info/30'
-                )}>
-                {label}
-              </button>
-            ))}
+            {demandOptions.map(([value, label]) => {
+              const selected = form.main_demands.includes(value)
+              const disabled = !selected && form.main_demands.length >= 3
+              return (
+                <button key={value} type="button" disabled={disabled}
+                  onClick={() => setForm((f) => ({
+                    ...f,
+                    main_demands: f.main_demands.includes(value)
+                      ? f.main_demands.filter((d) => d !== value)
+                      : [...f.main_demands, value],
+                  }))}
+                  className={clsx('py-3 px-2 rounded-xl border text-sm font-medium transition-all duration-200 cursor-pointer text-center',
+                    selected
+                      ? 'border-brand-info bg-brand-info/15 text-brand-info'
+                      : disabled
+                        ? 'border-brand-border bg-brand-border/10 text-brand-muted/40 cursor-not-allowed'
+                        : 'border-brand-border bg-brand-border/20 text-brand-muted hover:border-brand-info/30'
+                  )}>
+                  {label}
+                </button>
+              )
+            })}
           </div>
-          {form.main_demand === 'outro' && (
+          {form.main_demands.includes('outro') && (
             <textarea value={form.demand_description}
               onChange={(e) => setForm((f) => ({ ...f, demand_description: e.target.value }))}
               placeholder="Descreva a demanda…"
@@ -305,14 +326,6 @@ export default function VisitPage() {
             />
           )}
         </div>
-
-        {/* ── CAPTAÇÃO ─────────────────────────────────────────── */}
-        <input value={form.phone_collected}
-          onChange={(e) => setForm((f) => ({ ...f, phone_collected: e.target.value }))}
-          placeholder="Telefone captado (opcional)"
-          type="tel" inputMode="tel"
-          className={inputClass}
-        />
 
         <textarea value={form.notes}
           onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
