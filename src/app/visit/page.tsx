@@ -159,7 +159,10 @@ export default function VisitPage() {
     addVisit(visit)
     setLoading(false)
     setSaved(true)
-    setTimeout(() => router.push('/dashboard'), 1200)
+    const dest = user.role === 'coordenador_regiao' ? '/region'
+      : user.role === 'coordenador_bairro' ? '/coordinator'
+      : '/dashboard'
+    setTimeout(() => router.push(dest), 1200)
   }
 
   const inputClass = 'bg-brand-card border border-brand-border rounded-2xl px-4 py-4 text-brand-text text-base placeholder-brand-muted w-full'

@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { Home, Users, MapPin, TrendingUp, LogOut, Trophy, Clock, CheckCircle, UserPlus, XCircle } from 'lucide-react'
+import { Home, Users, MapPin, TrendingUp, LogOut, Trophy, Clock, CheckCircle, UserPlus, XCircle, PlusCircle } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { generateMockVisits, MOCK_USERS } from '@/lib/mock-data'
@@ -180,6 +180,12 @@ export default function RegionPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => router.push('/visit')}
+            className="flex items-center gap-1.5 px-3 py-2 bg-brand-card border border-brand-border text-brand-text rounded-xl text-sm font-semibold cursor-pointer hover:border-brand-primary/50 transition-colors">
+            <PlusCircle className="w-4 h-4 text-brand-primary" />
+            Visita
+          </button>
           <button
             onClick={() => { setShowInviteModal(true); setInviteResult(null) }}
             className="flex items-center gap-1.5 px-3 py-2 bg-brand-primary text-brand-bg rounded-xl text-sm font-semibold cursor-pointer hover:opacity-90 transition-opacity">

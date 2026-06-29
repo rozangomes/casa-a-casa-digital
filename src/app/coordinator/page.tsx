@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import dynamicImport from 'next/dynamic'
 import {
   Home, Users, MapPin, TrendingUp, LogOut,
-  Trophy, Clock, CheckCircle, UserPlus, Mail, XCircle,
+  Trophy, Clock, CheckCircle, UserPlus, Mail, XCircle, PlusCircle,
 } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
@@ -179,9 +179,17 @@ export default function CoordinatorPage() {
             {format(new Date(), "EEEE, d 'de' MMMM", { locale: ptBR })}
           </p>
         </div>
-        <button onClick={handleLogout} className="p-2 text-brand-muted hover:text-brand-danger transition-colors cursor-pointer" aria-label="Sair">
-          <LogOut className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => router.push('/visit')}
+            className="flex items-center gap-1.5 px-3 py-2 bg-brand-card border border-brand-border text-brand-text rounded-xl text-sm font-semibold cursor-pointer hover:border-brand-primary/50 transition-colors">
+            <PlusCircle className="w-4 h-4 text-brand-primary" />
+            Visita
+          </button>
+          <button onClick={handleLogout} className="p-2 text-brand-muted hover:text-brand-danger transition-colors cursor-pointer" aria-label="Sair">
+            <LogOut className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       {useMock && (
