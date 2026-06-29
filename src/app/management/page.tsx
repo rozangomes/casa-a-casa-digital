@@ -108,26 +108,36 @@ function buildTerritorial(visits: Visit[]): TerritorialIntelligence[] {
 
 function buildNeighborhoodDemands(visits: Visit[]) {
   const map: Record<string, Record<DemandCategory, number>> = {}
-  const demands = new Set<DemandCategory>()
+  const globalCount: Record<string, number> = {}
 
   visits.forEach((v) => {
-    const nb = v.neighborhood || 'Não informado';
+    const nb = v.neighborhood || 'Não informado'
     if (!map[nb]) map[nb] = {} as Record<DemandCategory, number>
     ;([v.main_demand, v.main_demand_2, v.main_demand_3] as (DemandCategory | undefined)[])
       .forEach((d) => {
         if (d) {
           map[nb][d] = (map[nb][d] || 0) + 1
-          demands.add(d)
+          globalCount[d] = (globalCount[d] || 0) + 1
         }
       })
   })
 
+  // Apenas as 3 demandas mais citadas no geral
+  const top3 = Object.entries(globalCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([d]) => d as DemandCategory)
+
   const data = Object.entries(map)
-    .map(([neighborhood, counts]) => ({ neighborhood, ...counts, total: Object.values(counts).reduce((s, n) => s + n, 0) }))
+    .map(([neighborhood, counts]) => ({
+      neighborhood,
+      ...Object.fromEntries(top3.map((d) => [d, counts[d] || 0])),
+      total: top3.reduce((s, d) => s + (counts[d] || 0), 0),
+    }))
     .sort((a, b) => b.total - a.total)
     .slice(0, 12)
 
-  return { data, activeDemands: Array.from(demands) as DemandCategory[] }
+  return { data, activeDemands: top3 }
 }
 
 type Tab = 'overview' | 'territory' | 'militants' | 'map' | 'team'
