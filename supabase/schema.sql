@@ -27,7 +27,7 @@ create table if not exists public.users (
   status            text not null default 'active'
                       check (status in ('pending','active')),
   role              text not null default 'visitador'
-                      check (role in ('visitador','coordenador_bairro','estrategista')),
+                      check (role in ('visitador','coordenador_bairro','coordenador_regiao','estrategista')),
   team_id           uuid references public.teams(id),
   coordinator_name  text not null default '',
   neighborhood_zone text,

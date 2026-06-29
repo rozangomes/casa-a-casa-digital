@@ -1,5 +1,12 @@
 // ── Hierarquia de papéis ─────────────────────────────────────────────────────
-export type UserRole = 'estrategista' | 'coordenador_bairro' | 'visitador'
+export type UserRole = 'estrategista' | 'coordenador_regiao' | 'coordenador_bairro' | 'visitador'
+
+export const ROLE_LABELS: Record<UserRole, string> = {
+  estrategista: 'Estrategista',
+  coordenador_regiao: 'Coordenador de Região',
+  coordenador_bairro: 'Coordenador de Bairro',
+  visitador: 'Visitador / Militante',
+}
 
 // ── Demandas territoriais ─────────────────────────────────────────────────────
 export type DemandCategory =

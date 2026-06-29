@@ -15,6 +15,7 @@ export default function RootPage() {
         if (session) {
           setUser(session)
           if (session.role === 'estrategista') router.replace('/management')
+          else if (session.role === 'coordenador_regiao') router.replace('/region')
           else if (session.role === 'coordenador_bairro') router.replace('/coordinator')
           else router.replace('/dashboard')
         } else {

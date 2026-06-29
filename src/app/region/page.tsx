@@ -3,41 +3,28 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import dynamicImport from 'next/dynamic'
-import {
-  Home, Users, MapPin, TrendingUp, LogOut,
-  Trophy, Clock, CheckCircle, UserPlus, Mail, XCircle,
-} from 'lucide-react'
+import { Home, Users, MapPin, TrendingUp, LogOut, Trophy, Clock, CheckCircle, UserPlus, XCircle } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { generateMockVisits, MOCK_USERS } from '@/lib/mock-data'
 import { StatCard } from '@/components/ui/StatCard'
-import { PerceptionBadge } from '@/components/ui/PerceptionBadge'
 import type { Visit, DashboardStats } from '@/types'
 import { clearSession } from '@/lib/db'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-
-// Leaflet precisa de SSR desabilitado (acessa window)
-const VisitsMap = dynamicImport(() => import('@/components/VisitsMap'), { ssr: false })
+import { clsx } from 'clsx'
 
 function buildStats(visits: Visit[]): DashboardStats {
   const today = new Date().toISOString().slice(0, 10)
-
-  const byTeam = Object.entries(
-    visits.reduce((acc, v) => { acc[v.team_id] = (acc[v.team_id] || 0) + 1; return acc }, {} as Record<string, number>)
-  ).map(([team, count]) => ({ team, count })).sort((a, b) => b.count - a.count)
-
   const byMilitant = Object.entries(
     visits.reduce((acc, v) => {
-      const key = v.user_id
-      if (!acc[key]) {
+      if (!acc[v.user_id]) {
         const u = MOCK_USERS.find((u) => u.id === v.user_id)
-        acc[key] = { name: u?.name || v.user_id, phone: u?.phone || '', count: 0, role: u?.role || 'visitador' }
+        acc[v.user_id] = { name: u?.name || v.user_id, phone: u?.phone || '', count: 0, role: u?.role || 'visitador' }
       }
-      acc[key].count++
+      acc[v.user_id].count++
       return acc
-    }, {} as Record<string, { name: string; phone: string; count: number; role: import('@/types').UserRole }>)
+    }, {} as Record<string, DashboardStats['by_militant'][0]>)
   ).map(([, v]) => v).sort((a, b) => b.count - a.count)
 
   const byNeighborhood = Object.entries(
@@ -53,38 +40,43 @@ function buildStats(visits: Visit[]): DashboardStats {
     total_visits: visits.length,
     total_today: visits.filter((v) => v.visited_at.startsWith(today)).length,
     pending_sync: visits.filter((v) => v.sync_pending).length,
-    by_team: byTeam,
+    by_team: [],
     by_militant: byMilitant,
     by_neighborhood: byNeighborhood,
     by_perception: perceptions,
-    by_demand: {} as import('@/types').DashboardStats['by_demand'],
+    by_demand: {} as DashboardStats['by_demand'],
     daily_series: [],
     visits_with_coords: visits.filter((v) => v.latitude && v.longitude),
   }
 }
 
-type Tab = 'overview' | 'militants' | 'map'
+type Tab = 'overview' | 'coordinators' | 'militants'
 
-export default function CoordinatorPage() {
+export default function RegionPage() {
   const router = useRouter()
   const { user } = useAppStore()
   const [visits, setVisits] = useState<Visit[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<Tab>('overview')
   const [useMock, setUseMock] = useState(false)
+  const [tab, setTab] = useState<Tab>('overview')
 
   const [showInviteModal, setShowInviteModal] = useState(false)
-  const [inviteForm, setInviteForm] = useState({ name: '', phone: '', email: '' })
+  const [inviteForm, setInviteForm] = useState({ name: '', phone: '', email: '', role: 'coordenador_bairro', neighborhood_zone: '' })
   const [inviteLoading, setInviteLoading] = useState(false)
   const [inviteResult, setInviteResult] = useState<{ ok: boolean; msg: string } | null>(null)
 
   useEffect(() => {
     async function init() {
-      if (!user) {
+      let activeUser = user
+      if (!activeUser) {
         const { getSession } = await import('@/lib/db')
         const session = await getSession()
         if (!session) { router.replace('/login'); return }
         useAppStore.getState().setUser(session)
+        activeUser = session
+      }
+      if (activeUser.role !== 'coordenador_regiao' && activeUser.role !== 'estrategista') {
+        router.replace('/coordinator'); return
       }
       loadVisits()
     }
@@ -97,30 +89,18 @@ export default function CoordinatorPage() {
       if (!isSupabaseConfigured()) {
         setVisits(generateMockVisits()); setUseMock(true); setLoading(false); return
       }
-      const { data, error } = await supabase
-        .from('visits')
-        .select('*')
-        .order('visited_at', { ascending: false })
-
+      const { data, error } = await supabase.from('visits').select('*').order('visited_at', { ascending: false })
       if (error || !data || data.length === 0) {
-        // Sem dados reais → usa mock
-        setVisits(generateMockVisits())
-        setUseMock(true)
+        setVisits(generateMockVisits()); setUseMock(true)
       } else {
-        setVisits(data as Visit[])
-        setUseMock(false)
+        setVisits(data as Visit[]); setUseMock(false)
       }
     } catch {
-      setVisits(generateMockVisits())
-      setUseMock(true)
+      setVisits(generateMockVisits()); setUseMock(true)
     } finally {
       setLoading(false)
     }
   }
-
-  const stats = useMemo(() => buildStats(visits), [visits])
-  const favorable = stats.by_perception.muito_favoravel + stats.by_perception.favoravel
-  const total = stats.total_visits || 1
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault()
@@ -134,17 +114,17 @@ export default function CoordinatorPage() {
         name: inviteForm.name,
         email: inviteForm.email,
         phone: inviteForm.phone,
-        role: 'visitador',
+        role: inviteForm.role,
         invited_by: user.id,
         invited_by_name: user.name,
         coordinator_name: user.name,
-        team_id: user.team_id,
+        neighborhood_zone: inviteForm.neighborhood_zone,
       }),
     })
     const data = await res.json()
     if (res.ok) {
       setInviteResult({ ok: true, msg: `Convite enviado para ${inviteForm.email}` })
-      setInviteForm({ name: '', phone: '', email: '' })
+      setInviteForm({ name: '', phone: '', email: '', role: 'coordenador_bairro', neighborhood_zone: '' })
     } else {
       setInviteResult({ ok: false, msg: data.error || 'Erro ao enviar convite' })
     }
@@ -156,46 +136,43 @@ export default function CoordinatorPage() {
     router.replace('/login')
   }
 
+  const stats = useMemo(() => buildStats(visits), [visits])
+  const favorable = stats.by_perception.muito_favoravel + stats.by_perception.favoravel
+  const total = stats.total_visits || 1
+
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: 'overview', label: 'Resumo', icon: TrendingUp },
-    { id: 'militants', label: 'Militantes', icon: Users },
-    { id: 'map', label: 'Mapa', icon: MapPin },
+    { id: 'coordinators', label: 'Coordenadores', icon: Users },
+    { id: 'militants', label: 'Militantes', icon: MapPin },
   ]
 
   return (
     <div className="min-h-screen bg-brand-bg flex flex-col safe-top">
-      {/* Header */}
       <div className="px-5 pt-5 pb-3 flex items-start justify-between">
         <div>
-          <p className="text-brand-muted text-xs uppercase tracking-widest mb-1">Painel do Coordenador</p>
+          <p className="text-brand-muted text-xs uppercase tracking-widest mb-1">Coordenador de Região</p>
           <h1 className="text-2xl font-bold text-brand-text">{user?.name.split(' ')[0]}</h1>
           <p className="text-brand-muted text-xs mt-0.5">
             {format(new Date(), "EEEE, d 'de' MMMM", { locale: ptBR })}
           </p>
         </div>
-        <button onClick={handleLogout} className="p-2 text-brand-muted hover:text-brand-danger transition-colors cursor-pointer" aria-label="Sair">
+        <button onClick={handleLogout} className="p-2 text-brand-muted hover:text-brand-danger transition-colors cursor-pointer">
           <LogOut className="w-5 h-5" />
         </button>
       </div>
 
       {useMock && (
         <div className="mx-5 mb-3 px-4 py-2 bg-brand-info/10 border border-brand-info/30 rounded-xl text-brand-info text-xs">
-          Exibindo dados de demonstração (sem conexão com Supabase)
+          Exibindo dados de demonstração
         </div>
       )}
 
-      {/* Tabs */}
       <div className="flex px-5 gap-2 mb-4">
         {tabs.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer ${
-              tab === id
-                ? 'bg-brand-primary text-brand-bg'
-                : 'bg-brand-card text-brand-muted border border-brand-border hover:border-brand-primary/50'
-            }`}
-          >
+          <button key={id} onClick={() => setTab(id)}
+            className={clsx('flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer',
+              tab === id ? 'bg-brand-primary text-brand-bg' : 'bg-brand-card text-brand-muted border border-brand-border hover:border-brand-primary/50'
+            )}>
             <Icon className="w-4 h-4" />
             {label}
           </button>
@@ -203,18 +180,16 @@ export default function CoordinatorPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 pb-8 safe-bottom">
-        {/* ── OVERVIEW ─────────────────────────────────────────────── */}
+
         {tab === 'overview' && !loading && (
           <div className="space-y-5 animate-fade-in">
-            {/* Stats grid */}
             <div className="grid grid-cols-2 gap-3">
               <StatCard label="Total de visitas" value={stats.total_visits} icon={Home} color="green" />
               <StatCard label="Hoje" value={stats.total_today} icon={Clock} color="blue" />
               <StatCard label="Favoráveis" value={`${Math.round((favorable / total) * 100)}%`} icon={CheckCircle} color="green" sublabel={`${favorable} de ${stats.total_visits}`} />
-              <StatCard label="Pendente sync" value={stats.pending_sync} icon={Clock} color={stats.pending_sync > 0 ? 'yellow' : 'white'} />
+              <StatCard label="Bairros" value={stats.by_neighborhood.length} icon={MapPin} color="white" />
             </div>
 
-            {/* Percepção */}
             <div className="bg-brand-card border border-brand-border rounded-2xl p-4">
               <p className="text-brand-muted text-xs mb-3 font-medium uppercase tracking-wider">Percepção política</p>
               {[
@@ -237,7 +212,6 @@ export default function CoordinatorPage() {
               })}
             </div>
 
-            {/* Por bairro */}
             <div className="bg-brand-card border border-brand-border rounded-2xl p-4">
               <p className="text-brand-muted text-xs mb-3 font-medium uppercase tracking-wider">Por bairro</p>
               <div className="space-y-2">
@@ -252,28 +226,34 @@ export default function CoordinatorPage() {
           </div>
         )}
 
-        {/* ── MILITANTS ────────────────────────────────────────────── */}
-        {tab === 'militants' && !loading && (
+        {tab === 'coordinators' && !loading && (
           <div className="space-y-3 animate-fade-in">
             <div className="flex items-center justify-between">
-              <p className="text-brand-muted text-xs uppercase tracking-wider font-medium">Ranking de militantes</p>
-              <button
-                onClick={() => { setShowInviteModal(true); setInviteResult(null) }}
-                className="flex items-center gap-1.5 px-3 py-2 bg-brand-primary text-brand-bg rounded-xl text-sm font-semibold cursor-pointer hover:opacity-90 transition-opacity"
-              >
+              <p className="text-brand-muted text-xs uppercase tracking-wider font-medium">Coordenadores de Bairro</p>
+              <button onClick={() => { setShowInviteModal(true); setInviteResult(null) }}
+                className="flex items-center gap-1.5 px-3 py-2 bg-brand-primary text-brand-bg rounded-xl text-sm font-semibold cursor-pointer hover:opacity-90 transition-opacity">
                 <UserPlus className="w-4 h-4" />
                 Convidar
               </button>
             </div>
+            <p className="text-brand-muted text-xs text-center py-8">
+              Os coordenadores aparecem aqui quando cadastrados via convite.
+            </p>
+          </div>
+        )}
+
+        {tab === 'militants' && !loading && (
+          <div className="space-y-3 animate-fade-in">
+            <p className="text-brand-muted text-xs uppercase tracking-wider font-medium">Ranking de militantes · {stats.by_militant.length}</p>
             {stats.by_militant.map((m, i) => (
               <div key={m.phone} className="bg-brand-card border border-brand-border rounded-2xl px-4 py-3 flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
+                <div className={clsx('w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0',
                   i === 0 ? 'bg-yellow-500/20 text-yellow-400' :
                   i === 1 ? 'bg-slate-400/20 text-slate-400' :
                   i === 2 ? 'bg-orange-500/20 text-orange-400' :
                   'bg-brand-border/50 text-brand-muted'
-                }`}>
-                  {i === 0 ? <Trophy className="w-4 h-4" /> : i + 1}
+                )}>
+                  {i < 3 ? <Trophy className="w-4 h-4" /> : <span className="text-xs">{i + 1}</span>}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-brand-text font-medium text-sm truncate">{m.name}</p>
@@ -288,74 +268,51 @@ export default function CoordinatorPage() {
           </div>
         )}
 
-        {/* ── MAP ──────────────────────────────────────────────────── */}
-        {tab === 'map' && (
-          <div className="animate-fade-in">
-            <div className="rounded-2xl overflow-hidden border border-brand-border" style={{ height: '70vh' }}>
-              <VisitsMap visits={stats.visits_with_coords} />
-            </div>
-            <p className="text-brand-muted text-xs text-center mt-2">
-              {stats.visits_with_coords.length} visitas com localização GPS
-            </p>
-          </div>
-        )}
-
         {loading && (
-          <div className="flex items-center justify-center h-40 text-brand-muted">
-            <svg className="w-6 h-6 animate-spin mr-2" viewBox="0 0 24 24" fill="none">
+          <div className="flex items-center justify-center h-40 text-brand-muted gap-2">
+            <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
             </svg>
-            Carregando dados…
+            Carregando…
           </div>
         )}
       </div>
 
-      {/* ── MODAL CONVIDAR VISITADOR ──────────────────────────── */}
       {showInviteModal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-4 bg-black/60 animate-fade-in"
           onClick={(e) => e.target === e.currentTarget && setShowInviteModal(false)}>
           <div className="w-full max-w-md bg-brand-surface border border-brand-border rounded-3xl p-6 shadow-card">
-            <h2 className="text-brand-text font-bold text-lg mb-1">Convidar Militante</h2>
-            <p className="text-brand-muted text-sm mb-5">
-              O convite será enviado por email com um link para criar a senha.
-            </p>
+            <h2 className="text-brand-text font-bold text-lg mb-1">Convidar para minha região</h2>
+            <p className="text-brand-muted text-sm mb-5">O convite será enviado por email com link para criar a senha.</p>
 
             <form onSubmit={handleInvite} className="space-y-3">
-              <input
-                value={inviteForm.name}
-                onChange={(e) => setInviteForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Nome completo"
-                required
-                className="w-full bg-brand-card border border-brand-border rounded-2xl px-4 py-3.5 text-brand-text text-base placeholder-brand-muted focus:border-brand-primary transition-colors"
-              />
-              <input
-                type="tel"
-                value={inviteForm.phone}
-                onChange={(e) => setInviteForm((f) => ({ ...f, phone: e.target.value }))}
-                placeholder="Telefone / WhatsApp"
-                required
-                inputMode="tel"
-                className="w-full bg-brand-card border border-brand-border rounded-2xl px-4 py-3.5 text-brand-text text-base placeholder-brand-muted focus:border-brand-primary transition-colors"
-              />
-              <input
-                type="email"
-                value={inviteForm.email}
-                onChange={(e) => setInviteForm((f) => ({ ...f, email: e.target.value }))}
-                placeholder="Email"
-                required
-                className="w-full bg-brand-card border border-brand-border rounded-2xl px-4 py-3.5 text-brand-text text-base placeholder-brand-muted focus:border-brand-primary transition-colors"
-              />
+              <select
+                value={inviteForm.role}
+                onChange={(e) => setInviteForm((f) => ({ ...f, role: e.target.value }))}
+                className="w-full bg-brand-card border border-brand-border rounded-2xl px-4 py-3.5 text-brand-text text-base focus:border-brand-primary transition-colors cursor-pointer"
+              >
+                <option value="coordenador_bairro">Coordenador de Bairro</option>
+                <option value="visitador">Visitador / Militante</option>
+              </select>
+              <input value={inviteForm.name} onChange={(e) => setInviteForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Nome completo" required
+                className="w-full bg-brand-card border border-brand-border rounded-2xl px-4 py-3.5 text-brand-text text-base placeholder-brand-muted focus:border-brand-primary transition-colors" />
+              <input type="tel" value={inviteForm.phone} onChange={(e) => setInviteForm((f) => ({ ...f, phone: e.target.value }))}
+                placeholder="Telefone / WhatsApp" required inputMode="tel"
+                className="w-full bg-brand-card border border-brand-border rounded-2xl px-4 py-3.5 text-brand-text text-base placeholder-brand-muted focus:border-brand-primary transition-colors" />
+              <input type="email" value={inviteForm.email} onChange={(e) => setInviteForm((f) => ({ ...f, email: e.target.value }))}
+                placeholder="Email" required
+                className="w-full bg-brand-card border border-brand-border rounded-2xl px-4 py-3.5 text-brand-text text-base placeholder-brand-muted focus:border-brand-primary transition-colors" />
+              <input value={inviteForm.neighborhood_zone} onChange={(e) => setInviteForm((f) => ({ ...f, neighborhood_zone: e.target.value }))}
+                placeholder="Bairro / zona (opcional)"
+                className="w-full bg-brand-card border border-brand-border rounded-2xl px-4 py-3.5 text-brand-text text-base placeholder-brand-muted focus:border-brand-primary transition-colors" />
 
               {inviteResult && (
-                <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm ${
-                  inviteResult.ok
-                    ? 'bg-brand-primary/10 border border-brand-primary/30 text-brand-primary'
-                    : 'bg-brand-danger/10 border border-brand-danger/30 text-brand-danger'
-                }`}>
-                  {inviteResult.ok
-                    ? <CheckCircle className="w-4 h-4 shrink-0" />
-                    : <XCircle className="w-4 h-4 shrink-0" />}
+                <div className={clsx('flex items-center gap-2 px-4 py-3 rounded-xl text-sm',
+                  inviteResult.ok ? 'bg-brand-primary/10 border border-brand-primary/30 text-brand-primary' : 'bg-brand-danger/10 border border-brand-danger/30 text-brand-danger'
+                )}>
+                  {inviteResult.ok ? <CheckCircle className="w-4 h-4 shrink-0" /> : <XCircle className="w-4 h-4 shrink-0" />}
                   {inviteResult.msg}
                 </div>
               )}

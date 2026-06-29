@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   const supabase = adminClient()
   const { data, error } = await supabase
     .from('users')
-    .select('id, name, email, role, neighborhood_zone, coordinator_name')
+    .select('id, name, email, phone, role, neighborhood_zone, coordinator_name')
     .eq('invite_token', token)
     .eq('status', 'pending')
     .single()

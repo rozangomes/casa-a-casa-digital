@@ -15,7 +15,8 @@ import { clsx } from 'clsx'
 // ── Modo demo (sem Supabase) ─────────────────────────────────────────────────
 const roles: { value: UserRole; label: string; desc: string }[] = [
   { value: 'visitador',          label: 'Visitador / Militante',      desc: 'Registra visitas em campo' },
-  { value: 'coordenador_bairro', label: 'Coordenador de Bairro',      desc: 'Gerencia uma região geográfica' },
+  { value: 'coordenador_bairro', label: 'Coordenador de Bairro',      desc: 'Gerencia um bairro' },
+  { value: 'coordenador_regiao', label: 'Coordenador de Região',      desc: 'Gerencia uma região' },
   { value: 'estrategista',       label: 'Estrategista / Coord. Geral', desc: 'Acesso completo à campanha' },
 ]
 
@@ -50,6 +51,7 @@ function DemoLogin() {
     await saveSession(user)
     setUser(user)
     if (role === 'estrategista') router.push('/management')
+    else if (role === 'coordenador_regiao') router.push('/region')
     else if (role === 'coordenador_bairro') router.push('/coordinator')
     else router.push('/dashboard')
     setLoading(false)

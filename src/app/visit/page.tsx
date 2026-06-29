@@ -61,7 +61,7 @@ export default function VisitPage() {
     street: '',
     street_number: '',
     neighborhood: '',
-    city: '',
+    city: 'Magé',
     state: '',
     resident_home: true,
     received_material: false,

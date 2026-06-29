@@ -141,7 +141,7 @@ export default function ManagementPage() {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [teamLoading, setTeamLoading] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
-  const [inviteForm, setInviteForm] = useState({ name: '', email: '', neighborhood_zone: '' })
+  const [inviteForm, setInviteForm] = useState({ name: '', email: '', phone: '', role: 'coordenador_regiao' as string, neighborhood_zone: '' })
   const [inviteLoading, setInviteLoading] = useState(false)
   const [inviteResult, setInviteResult] = useState<{ ok: boolean; msg: string } | null>(null)
 
@@ -220,7 +220,8 @@ export default function ManagementPage() {
       body: JSON.stringify({
         name: inviteForm.name,
         email: inviteForm.email,
-        role: 'coordenador_bairro',
+        phone: inviteForm.phone,
+        role: inviteForm.role,
         invited_by: user.id,
         invited_by_name: user.name,
         neighborhood_zone: inviteForm.neighborhood_zone,
@@ -229,7 +230,7 @@ export default function ManagementPage() {
     const data = await res.json()
     if (res.ok) {
       setInviteResult({ ok: true, msg: `Convite enviado para ${inviteForm.email}` })
-      setInviteForm({ name: '', email: '', neighborhood_zone: '' })
+      setInviteForm({ name: '', email: '', phone: '', role: 'coordenador_regiao', neighborhood_zone: '' })
       loadTeam()
     } else {
       setInviteResult({ ok: false, msg: data.error || 'Erro ao enviar convite' })
@@ -616,11 +617,30 @@ export default function ManagementPage() {
             </p>
 
             <form onSubmit={handleInvite} className="space-y-3">
+              {/* Seletor de papel */}
+              <select
+                value={inviteForm.role}
+                onChange={(e) => setInviteForm((f) => ({ ...f, role: e.target.value }))}
+                className="w-full bg-brand-card border border-brand-border rounded-2xl px-4 py-3.5 text-brand-text text-base focus:border-brand-primary transition-colors cursor-pointer"
+              >
+                <option value="coordenador_regiao">Coordenador de Região</option>
+                <option value="coordenador_bairro">Coordenador de Bairro</option>
+                <option value="visitador">Visitador / Militante</option>
+              </select>
               <input
                 value={inviteForm.name}
                 onChange={(e) => setInviteForm((f) => ({ ...f, name: e.target.value }))}
                 placeholder="Nome completo"
                 required
+                className="w-full bg-brand-card border border-brand-border rounded-2xl px-4 py-3.5 text-brand-text text-base placeholder-brand-muted focus:border-brand-primary transition-colors"
+              />
+              <input
+                type="tel"
+                value={inviteForm.phone}
+                onChange={(e) => setInviteForm((f) => ({ ...f, phone: e.target.value }))}
+                placeholder="Telefone / WhatsApp"
+                required
+                inputMode="tel"
                 className="w-full bg-brand-card border border-brand-border rounded-2xl px-4 py-3.5 text-brand-text text-base placeholder-brand-muted focus:border-brand-primary transition-colors"
               />
               <input

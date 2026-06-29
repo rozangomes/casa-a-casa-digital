@@ -10,17 +10,34 @@ function adminClient() {
 }
 
 export async function POST(req: NextRequest) {
-  const { name, email, role, invited_by, invited_by_name, coordinator_name, neighborhood_zone, team_id } = await req.json()
+  const { name, email, phone, role, invited_by, invited_by_name, coordinator_name, neighborhood_zone, team_id } = await req.json()
 
-  if (!name || !email || !role) {
-    return NextResponse.json({ error: 'Dados obrigatórios ausentes' }, { status: 400 })
+  if (!name || !email || !phone || !role) {
+    return NextResponse.json({ error: 'Nome, email, telefone e papel são obrigatórios' }, { status: 400 })
   }
 
   const supabase = adminClient()
+
+  // Verifica duplicatas antes de inserir
+  const { data: existing } = await supabase
+    .from('users')
+    .select('id, email, phone')
+    .or(`email.eq.${email.toLowerCase().trim()},phone.eq.${phone.trim()}`)
+    .maybeSingle()
+
+  if (existing) {
+    if (existing.email === email.toLowerCase().trim()) {
+      return NextResponse.json({ error: 'Este email já está cadastrado' }, { status: 409 })
+    }
+    if (existing.phone === phone.trim()) {
+      return NextResponse.json({ error: 'Este telefone já está cadastrado' }, { status: 409 })
+    }
+  }
+
   const invite_token = uuidv4()
   const id = uuidv4()
 
-  // Garante que o team_id existe na tabela teams antes de inserir o usuário
+  // Cria team se não foi passado
   let resolvedTeamId = team_id
   if (!resolvedTeamId) {
     resolvedTeamId = uuidv4()
@@ -28,7 +45,7 @@ export async function POST(req: NextRequest) {
       id: resolvedTeamId,
       name: `Equipe ${name}`,
       coordinator_name: name,
-      city: 'São Paulo',
+      city: 'Magé',
     })
   }
 
@@ -36,6 +53,7 @@ export async function POST(req: NextRequest) {
     id,
     name,
     email: email.toLowerCase().trim(),
+    phone: phone.trim(),
     role,
     status: 'pending',
     invite_token,
@@ -43,13 +61,15 @@ export async function POST(req: NextRequest) {
     coordinator_name: coordinator_name || invited_by_name || '',
     neighborhood_zone: neighborhood_zone || null,
     team_id: resolvedTeamId,
-    phone: id,
     is_coordinator: role !== 'visitador',
     created_at: new Date().toISOString(),
   })
 
   if (error) {
     if (error.code === '23505') {
+      if (error.message.includes('phone')) {
+        return NextResponse.json({ error: 'Este telefone já está cadastrado' }, { status: 409 })
+      }
       return NextResponse.json({ error: 'Este email já está cadastrado' }, { status: 409 })
     }
     return NextResponse.json({ error: error.message }, { status: 400 })
