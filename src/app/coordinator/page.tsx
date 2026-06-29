@@ -21,7 +21,7 @@ import { ptBR } from 'date-fns/locale'
 // Leaflet precisa de SSR desabilitado (acessa window)
 const VisitsMap = dynamicImport(() => import('@/components/VisitsMap'), { ssr: false })
 
-function buildStats(visits: Visit[]): DashboardStats {
+function buildStats(visits: Visit[], userNames: Record<string, string> = {}): DashboardStats {
   const today = new Date().toISOString().slice(0, 10)
 
   const byTeam = Object.entries(
@@ -33,7 +33,7 @@ function buildStats(visits: Visit[]): DashboardStats {
       const key = v.user_id
       if (!acc[key]) {
         const u = MOCK_USERS.find((u) => u.id === v.user_id)
-        acc[key] = { name: u?.name || v.user_id, phone: u?.phone || '', count: 0, role: u?.role || 'visitador' }
+        acc[key] = { name: userNames[key] || u?.name || v.user_id, phone: u?.phone || '', count: 0, role: u?.role || 'visitador' }
       }
       acc[key].count++
       return acc
@@ -69,6 +69,7 @@ export default function CoordinatorPage() {
   const router = useRouter()
   const { user } = useAppStore()
   const [visits, setVisits] = useState<Visit[]>([])
+  const [userNames, setUserNames] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>('overview')
   const [useMock, setUseMock] = useState(false)
@@ -103,12 +104,17 @@ export default function CoordinatorPage() {
         .order('visited_at', { ascending: false })
 
       if (error || !data || data.length === 0) {
-        // Sem dados reais → usa mock
         setVisits(generateMockVisits())
         setUseMock(true)
       } else {
         setVisits(data as Visit[])
         setUseMock(false)
+        const { data: usersData } = await supabase.from('users').select('id, name')
+        if (usersData) {
+          const names: Record<string, string> = {}
+          usersData.forEach((u: { id: string; name: string }) => { names[u.id] = u.name })
+          setUserNames(names)
+        }
       }
     } catch {
       setVisits(generateMockVisits())
@@ -118,7 +124,7 @@ export default function CoordinatorPage() {
     }
   }
 
-  const stats = useMemo(() => buildStats(visits), [visits])
+  const stats = useMemo(() => buildStats(visits, userNames), [visits, userNames])
   const favorable = stats.by_perception.muito_favoravel + stats.by_perception.favoravel
   const total = stats.total_visits || 1
 

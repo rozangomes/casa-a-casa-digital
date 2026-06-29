@@ -112,6 +112,10 @@ export interface Visit {
   main_demand?: DemandCategory
   demand_description?: string         // campo aberto quando category = 'outro'
 
+  // Dados do morador
+  resident_name?: string
+  residents_over_16?: number
+
   // Captação
   phone_collected?: string
   notes?: string

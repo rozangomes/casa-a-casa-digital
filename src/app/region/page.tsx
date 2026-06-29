@@ -14,13 +14,13 @@ import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { clsx } from 'clsx'
 
-function buildStats(visits: Visit[]): DashboardStats {
+function buildStats(visits: Visit[], userNames: Record<string, string> = {}): DashboardStats {
   const today = new Date().toISOString().slice(0, 10)
   const byMilitant = Object.entries(
     visits.reduce((acc, v) => {
       if (!acc[v.user_id]) {
         const u = MOCK_USERS.find((u) => u.id === v.user_id)
-        acc[v.user_id] = { name: u?.name || v.user_id, phone: u?.phone || '', count: 0, role: u?.role || 'visitador' }
+        acc[v.user_id] = { name: userNames[v.user_id] || u?.name || v.user_id, phone: u?.phone || '', count: 0, role: u?.role || 'visitador' }
       }
       acc[v.user_id].count++
       return acc
@@ -60,6 +60,9 @@ export default function RegionPage() {
   const [useMock, setUseMock] = useState(false)
   const [tab, setTab] = useState<Tab>('overview')
 
+  const [userNames, setUserNames] = useState<Record<string, string>>({})
+  const [coordinators, setCoordinators] = useState<{ id: string; name: string; email: string; status: string; neighborhood_zone?: string }[]>([])
+  const [coordLoading, setCoordLoading] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [inviteForm, setInviteForm] = useState({ name: '', phone: '', email: '', role: 'coordenador_bairro', neighborhood_zone: '' })
   const [inviteLoading, setInviteLoading] = useState(false)
@@ -79,6 +82,7 @@ export default function RegionPage() {
         router.replace('/coordinator'); return
       }
       loadVisits()
+      loadCoordinators()
     }
     init()
   }, [user])
@@ -94,12 +98,30 @@ export default function RegionPage() {
         setVisits(generateMockVisits()); setUseMock(true)
       } else {
         setVisits(data as Visit[]); setUseMock(false)
+        const { data: usersData } = await supabase.from('users').select('id, name')
+        if (usersData) {
+          const names: Record<string, string> = {}
+          usersData.forEach((u: { id: string; name: string }) => { names[u.id] = u.name })
+          setUserNames(names)
+        }
       }
     } catch {
       setVisits(generateMockVisits()); setUseMock(true)
     } finally {
       setLoading(false)
     }
+  }
+
+  async function loadCoordinators() {
+    if (!isSupabaseConfigured()) return
+    setCoordLoading(true)
+    const { data } = await supabase
+      .from('users')
+      .select('id, name, email, status, neighborhood_zone')
+      .eq('role', 'coordenador_bairro')
+      .order('created_at', { ascending: false })
+    setCoordinators(data || [])
+    setCoordLoading(false)
   }
 
   async function handleInvite(e: React.FormEvent) {
@@ -125,6 +147,7 @@ export default function RegionPage() {
     if (res.ok) {
       setInviteResult({ ok: true, msg: `Convite enviado para ${inviteForm.email}` })
       setInviteForm({ name: '', phone: '', email: '', role: 'coordenador_bairro', neighborhood_zone: '' })
+      loadCoordinators()
     } else {
       setInviteResult({ ok: false, msg: data.error || 'Erro ao enviar convite' })
     }
@@ -136,7 +159,7 @@ export default function RegionPage() {
     router.replace('/login')
   }
 
-  const stats = useMemo(() => buildStats(visits), [visits])
+  const stats = useMemo(() => buildStats(visits, userNames), [visits, userNames])
   const favorable = stats.by_perception.muito_favoravel + stats.by_perception.favoravel
   const total = stats.total_visits || 1
 
@@ -226,19 +249,49 @@ export default function RegionPage() {
           </div>
         )}
 
-        {tab === 'coordinators' && !loading && (
+        {tab === 'coordinators' && (
           <div className="space-y-3 animate-fade-in">
             <div className="flex items-center justify-between">
-              <p className="text-brand-muted text-xs uppercase tracking-wider font-medium">Coordenadores de Bairro</p>
+              <p className="text-brand-muted text-xs uppercase tracking-wider font-medium">Coordenadores de Bairro · {coordinators.length}</p>
               <button onClick={() => { setShowInviteModal(true); setInviteResult(null) }}
                 className="flex items-center gap-1.5 px-3 py-2 bg-brand-primary text-brand-bg rounded-xl text-sm font-semibold cursor-pointer hover:opacity-90 transition-opacity">
                 <UserPlus className="w-4 h-4" />
                 Convidar
               </button>
             </div>
-            <p className="text-brand-muted text-xs text-center py-8">
-              Os coordenadores aparecem aqui quando cadastrados via convite.
-            </p>
+            {coordLoading && (
+              <div className="flex items-center justify-center h-20 text-brand-muted gap-2">
+                <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Carregando…
+              </div>
+            )}
+            {!coordLoading && coordinators.map((c) => (
+              <div key={c.id} className="bg-brand-card border border-brand-border rounded-2xl px-4 py-3 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-brand-primary/20 flex items-center justify-center shrink-0">
+                  <Users className="w-4 h-4 text-brand-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-brand-text font-medium text-sm truncate">{c.name}</p>
+                  <p className="text-brand-muted text-xs truncate">{c.email}</p>
+                  {c.neighborhood_zone && <p className="text-brand-muted text-xs">{c.neighborhood_zone}</p>}
+                </div>
+                <span className={clsx('px-2 py-1 rounded-full text-xs font-medium shrink-0',
+                  c.status === 'active' ? 'bg-brand-primary/10 text-brand-primary' : 'bg-brand-warning/10 text-brand-warning'
+                )}>
+                  {c.status === 'active' ? 'Ativo' : 'Pendente'}
+                </span>
+              </div>
+            ))}
+            {!coordLoading && coordinators.length === 0 && (
+              <div className="text-center py-10 text-brand-muted">
+                <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">Nenhum coordenador cadastrado ainda.</p>
+                <p className="text-xs mt-1">Convide o primeiro coordenador de bairro.</p>
+              </div>
+            )}
           </div>
         )}
 

@@ -24,7 +24,7 @@ import { clsx } from 'clsx'
 const VisitsMap = dynamicImport(() => import('@/components/VisitsMap'), { ssr: false })
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-function buildStats(visits: Visit[]): DashboardStats {
+function buildStats(visits: Visit[], userNames: Record<string, string> = {}): DashboardStats {
   const today = new Date().toISOString().slice(0, 10)
 
   const byTeam = Object.entries(
@@ -35,7 +35,7 @@ function buildStats(visits: Visit[]): DashboardStats {
     visits.reduce((acc, v) => {
       if (!acc[v.user_id]) {
         const u = MOCK_USERS.find((u) => u.id === v.user_id)
-        acc[v.user_id] = { name: u?.name || v.user_id, phone: u?.phone || '', count: 0, role: u?.role || 'visitador' }
+        acc[v.user_id] = { name: userNames[v.user_id] || u?.name || v.user_id, phone: u?.phone || '', count: 0, role: u?.role || 'visitador' }
       }
       acc[v.user_id].count++
       return acc
@@ -138,6 +138,7 @@ export default function ManagementPage() {
   const [selectedNeighborhood, setSelectedNeighborhood] = useState<string | null>(null)
 
   // Equipe
+  const [userNames, setUserNames] = useState<Record<string, string>>({})
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [teamLoading, setTeamLoading] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
@@ -176,6 +177,13 @@ export default function ManagementPage() {
         setVisits(generateMockVisits()); setUseMock(true)
       } else {
         setVisits(data as Visit[]); setUseMock(false)
+        // Busca nomes dos usuários reais
+        const { data: usersData } = await supabase.from('users').select('id, name')
+        if (usersData) {
+          const names: Record<string, string> = {}
+          usersData.forEach((u: { id: string; name: string }) => { names[u.id] = u.name })
+          setUserNames(names)
+        }
       }
     } catch {
       setVisits(generateMockVisits()); setUseMock(true)
@@ -184,7 +192,7 @@ export default function ManagementPage() {
     }
   }
 
-  const stats = useMemo(() => buildStats(visits), [visits])
+  const stats = useMemo(() => buildStats(visits, userNames), [visits, userNames])
   const territorial = useMemo(() => buildTerritorial(visits), [visits])
   const total = stats.total_visits || 1
   const favorable = stats.by_perception.muito_favoravel + stats.by_perception.favoravel
@@ -203,7 +211,7 @@ export default function ManagementPage() {
     const { data } = await supabase
       .from('users')
       .select('id, name, email, role, status, neighborhood_zone')
-      .eq('role', 'coordenador_bairro')
+      .in('role', ['coordenador_regiao', 'coordenador_bairro', 'visitador'])
       .order('created_at', { ascending: false })
     setTeamMembers((data as TeamMember[]) || [])
     setTeamLoading(false)
@@ -517,7 +525,7 @@ export default function ManagementPage() {
           <div className="space-y-4 animate-fade-in pt-1">
             <div className="flex items-center justify-between">
               <p className="text-brand-muted text-xs uppercase tracking-wider font-medium">
-                Coordenadores de Bairro · {teamMembers.length}
+                Equipe · {teamMembers.length}
               </p>
               <button
                 onClick={() => { setShowInviteModal(true); setInviteResult(null) }}
@@ -551,6 +559,9 @@ export default function ManagementPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-brand-text font-medium text-sm truncate">{m.name}</p>
+                  <p className="text-brand-primary text-xs font-medium">
+                    {m.role === 'coordenador_regiao' ? 'Coord. Região' : m.role === 'coordenador_bairro' ? 'Coord. Bairro' : 'Visitador'}
+                  </p>
                   <div className="flex items-center gap-1 text-brand-muted text-xs">
                     <Mail className="w-3 h-3" />
                     <span className="truncate">{m.email}</span>
@@ -573,8 +584,8 @@ export default function ManagementPage() {
             {!teamLoading && isSupabaseConfigured() && teamMembers.length === 0 && (
               <div className="text-center py-10 text-brand-muted">
                 <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                <p className="text-sm">Nenhum coordenador cadastrado ainda.</p>
-                <p className="text-xs mt-1">Convide o primeiro coordenador de bairro.</p>
+                <p className="text-sm">Nenhum membro cadastrado ainda.</p>
+                <p className="text-xs mt-1">Convide o primeiro coordenador.</p>
               </div>
             )}
           </div>

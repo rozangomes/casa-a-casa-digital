@@ -63,6 +63,8 @@ export default function VisitPage() {
     neighborhood: '',
     city: 'Magé',
     state: '',
+    resident_name: '',
+    residents_over_16: '' as string | number,
     resident_home: true,
     received_material: false,
     political_perception: 'favoravel' as PoliticalPerception,
@@ -134,6 +136,8 @@ export default function VisitPage() {
       street: form.street || undefined,
       street_number: form.street_number || undefined,
       state: form.state || undefined,
+      resident_name: form.resident_name || undefined,
+      residents_over_16: form.residents_over_16 !== '' ? Number(form.residents_over_16) : undefined,
       resident_home: form.resident_home,
       received_material: form.received_material,
       political_perception: form.political_perception,
@@ -227,6 +231,28 @@ export default function VisitPage() {
               placeholder="Bairro" className={inputClass} />
             <input value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
               placeholder="Cidade" className={inputClass} />
+          </div>
+        </div>
+
+        {/* ── DADOS DO MORADOR ─────────────────────────────────── */}
+        <div className="bg-brand-card border border-brand-border rounded-2xl p-4 space-y-3">
+          <p className="text-brand-text font-semibold text-sm">Morador</p>
+          <input
+            value={form.resident_name}
+            onChange={(e) => setForm((f) => ({ ...f, resident_name: e.target.value }))}
+            placeholder="Nome do morador (opcional)"
+            className={inputClass}
+          />
+          <div className="flex items-center gap-3">
+            <input
+              value={form.residents_over_16}
+              onChange={(e) => setForm((f) => ({ ...f, residents_over_16: e.target.value }))}
+              placeholder="Moradores com 16+ anos"
+              type="number"
+              min="0"
+              inputMode="numeric"
+              className={inputClass}
+            />
           </div>
         </div>
 

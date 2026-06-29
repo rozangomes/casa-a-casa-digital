@@ -68,6 +68,10 @@ create table if not exists public.visits (
   street_number        text,
   state                char(2),
 
+  -- Dados do morador
+  resident_name        text,
+  residents_over_16    smallint,
+
   -- Dados da visita
   resident_home        boolean not null default true,
   received_material    boolean not null default false,
