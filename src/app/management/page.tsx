@@ -10,7 +10,7 @@ import {
   AlertCircle, Zap,
 } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
-import { supabase } from '@/lib/supabase'
+import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { generateMockVisits, MOCK_USERS } from '@/lib/mock-data'
 import { StatCard } from '@/components/ui/StatCard'
 import { PerceptionBadge } from '@/components/ui/PerceptionBadge'
